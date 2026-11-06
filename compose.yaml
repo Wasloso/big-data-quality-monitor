@@ -1,0 +1,15 @@
+services:
+  spark-check:
+    image: apache/spark:4.0.2
+    working_dir: /app
+    volumes:
+      - ./scripts:/app/scripts:ro
+    environment:
+      SPARK_LOCAL_IP: 127.0.0.1
+    command:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - local[2]
+      - --conf
+      - spark.ui.enabled=false
+      - /app/scripts/check_spark.py
