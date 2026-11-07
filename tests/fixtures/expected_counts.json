@@ -1,0 +1,4 @@
+{
+  "A": {"inspections": 60, "rejects": 6, "reject_rate": 0.1},
+  "B": {"inspections": 60, "rejects": 12, "reject_rate": 0.2}
+}

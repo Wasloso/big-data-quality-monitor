@@ -6,7 +6,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 ## Current stage
 
-The first step is a working local Spark environment. The script in `scripts/check_spark.py` groups four made-up inspection results by production line and checks the counts. This is a batch smoke check; streaming, Kafka, and image inference are planned next.
+The local Spark setup and an [inspection event format](docs/event-schema.md) are ready. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The script in `scripts/check_spark.py` is still the original four-row batch smoke check; Kafka and streaming are next.
 
 ## Run the Spark check
 
@@ -28,11 +28,19 @@ Line B: 1 inspections, 0 rejects
 Local Spark check passed.
 ```
 
-A different result raises an error and returns a nonzero exit code. The script also prints the Python and Spark versions. This single smoke check is enough for the setup stage; there is no separate test suite yet.
+A different result raises an error and returns a nonzero exit code. The script also prints the Python and Spark versions. This remains the setup smoke check. The event-format checks below run separately without Spark.
+
+## Inspection sample
+
+With Python 3.10 or later, run the two small checks from the repository root:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+No additional Python dependencies are needed. The checks cover the sample totals and important invalid inputs. See [the event format](docs/event-schema.md) for the fields and generator command. Scores and image paths in this sample are placeholders.
 
 ## Next steps
-
-- Define the inspection event format and a repeatable two-line scenario.
 - Publish inspection events to a local Kafka broker.
 - Use Spark Structured Streaming to process events and save history.
 - Add visual anomaly detection with MVTec AD images and PatchCore.
