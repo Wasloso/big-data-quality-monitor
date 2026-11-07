@@ -1,0 +1,9 @@
+**
+!Dockerfile.kafka
+!requirements-kafka.txt
+!quality_monitor/
+!quality_monitor/*.py
+!tests/
+!tests/fixtures/
+!tests/fixtures/*.json
+!tests/fixtures/*.jsonl

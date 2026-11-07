@@ -1,0 +1,7 @@
+FROM python:3.12.12-slim
+WORKDIR /app
+COPY requirements-kafka.txt .
+RUN pip install --no-cache-dir -r requirements-kafka.txt
+COPY quality_monitor ./quality_monitor
+COPY tests/fixtures ./tests/fixtures
+ENTRYPOINT ["python", "-m", "quality_monitor.producer"]

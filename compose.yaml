@@ -1,4 +1,57 @@
 services:
+  kafka:
+    image: apache/kafka:4.1.2
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:19092,CONTROLLER://:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "kafka:19092", "--list"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
+
+  kafka-init:
+    image: apache/kafka:4.1.2
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: /opt/kafka/bin/kafka-topics.sh
+    command: ["--bootstrap-server", "kafka:19092", "--create", "--if-not-exists", "--topic", "inspections", "--partitions", "2", "--replication-factor", "1"]
+
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.kafka
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    command: ["--bootstrap-servers", "kafka:19092"]
+
+  kafka-check:
+    build:
+      context: .
+      dockerfile: Dockerfile.kafka
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    entrypoint: ["python", "-m", "quality_monitor.kafka_check"]
+    command: ["--bootstrap-servers", "kafka:19092"]
+
   spark-check:
     image: apache/spark:4.0.2
     working_dir: /app
@@ -13,3 +66,6 @@ services:
       - --conf
       - spark.ui.enabled=false
       - /app/scripts/check_spark.py
+
+volumes:
+  kafka-data:

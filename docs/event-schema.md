@@ -41,3 +41,9 @@ python3 -m unittest discover -s tests -v
 ```
 
 These checks validate the event contract and known sample totals. They do not test streaming, model accuracy, or Kafka delivery.
+
+## Kafka publication
+
+`quality_monitor.producer` publishes the generated sample to the `inspections` topic. Each invocation uses a new run ID by default and prefixes inspection/product IDs with it. Passing the same `--run-id` reuses those identities for deliberate duplicate injection. The Kafka key is `line_id`; images remain outside Kafka. Before enqueueing each message the producer replaces `published_at` with the current UTC wall-clock time while preserving synthetic `event_time`.
+
+The producer checks delivery callbacks and flushes pending messages before reporting success. Producer idempotence handles retries within a session, but does not deduplicate separate runs or guarantee exactly-once downstream results. See the repository README for Compose commands and the round-trip check.
