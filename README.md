@@ -34,7 +34,15 @@ Compose starts a single Kafka broker and creates the `inspections` topic with tw
 
 The producer uses `line_id` as the Kafka key; keys can share a partition. Each invocation gets a fresh run ID and distinct inspection/product IDs. To deliberately replay the same logical inspections, use `docker compose run --rm producer --run-id example-run` twice. Idempotence covers producer retries within a session; separate invocations can append duplicates, and the clean-archive step removes duplicates within its documented watermark horizon.
 
-`published_at` is set from the wall clock before each message is enqueued. `event_time` keeps the synthetic fixture time; image paths and predictions remain placeholders. This is a finite replay, without traffic pacing or image inference. Publication acknowledgement does not measure aggregate or dashboard latency.
+For a paced replay, set a target rate across both lines:
+
+```bash
+docker compose run --build --rm producer --rate 20
+```
+
+This sends the first inspection immediately and schedules subsequent inspections against a monotonic clock (120 records at 20/s take about 5.95 seconds before delivery flush). The schedule does not wait for individual delivery acknowledgements. If publication falls behind, overdue records are enqueued without an extra delay; the rate is a target, not a measured throughput guarantee. Omit `--rate` for the original unpaced replay. Zero, negative, and non-finite rates are rejected.
+
+`published_at` is set from the wall clock after any pacing wait, before each message is enqueued. `event_time` keeps the synthetic fixture time; pacing does not change event-time windows. Image paths and predictions remain placeholders. This is a finite replay without image inference. Publication acknowledgement does not measure aggregate or dashboard latency.
 
 Kafka is available only inside the Compose network at `kafka:19092`; no host port is published. Broker data is kept in the `kafka-data` volume across `docker compose down` / restart. To stop services while keeping history:
 

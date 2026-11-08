@@ -2,6 +2,8 @@
 
 import argparse
 import json
+import math
+import time
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -19,7 +21,16 @@ def prepare_events(run_id):
         yield event
 
 
-def publish_events(producer, events, topic):
+def positive_rate(value):
+    rate = float(value)
+    if not math.isfinite(rate) or rate <= 0:
+        raise ValueError("rate must be a positive finite number")
+    return rate
+
+
+def publish_events(producer, events, topic, rate=None):
+    if rate is not None:
+        rate = positive_rate(rate)
     delivered = 0
     errors = []
 
@@ -31,7 +42,13 @@ def publish_events(producer, events, topic):
             delivered += 1
 
     queued = 0
+    started = time.monotonic()
     for original in events:
+        if rate is not None:
+            # Fixed schedule: time spent publishing does not add to every interval.
+            delay = started + queued / rate - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
         event = {**original, "published_at": datetime.now(timezone.utc).isoformat()}
         validate_event(event)
         producer.produce(
@@ -72,10 +89,15 @@ def argument_parser(description):
 def main():
     parser = argument_parser(__doc__)
     parser.add_argument("--run-id", default=None)
+    parser.add_argument(
+        "--rate", type=positive_rate, default=None,
+        help="Target inspections per second across all lines; omit for an unpaced replay",
+    )
     args = parser.parse_args()
     run_id = args.run_id or str(uuid4())
     delivered = publish_events(
-        make_producer(args.bootstrap_servers), prepare_events(run_id), args.topic
+        make_producer(args.bootstrap_servers), prepare_events(run_id), args.topic,
+        rate=args.rate,
     )
     print(f"Published {delivered} inspections to {args.topic}; run_id={run_id}")
 
