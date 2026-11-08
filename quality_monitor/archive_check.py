@@ -11,9 +11,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--path", default="/data/raw")
+    parser.add_argument("--clean", action="store_true", help="Check flattened clean inspections and logical uniqueness")
     parser.add_argument("--invalid-key", default=None)
     parser.add_argument("--expected-invalid", type=int, default=0)
     args = parser.parse_args()
+    if args.clean and args.invalid_key is not None:
+        parser.error("--invalid-key applies only to the raw archive")
     spark = SparkSession.builder.appName("archive-check").getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
     try:
@@ -21,12 +24,19 @@ def main():
         duplicates = archived.groupBy("topic", "partition", "offset").count().filter("count > 1")
         if duplicates.limit(1).count():
             raise RuntimeError("The same Kafka offset was archived more than once")
-        run = archived.filter(F.col("event.run_id") == args.run_id)
-        if run.filter(~F.col("is_valid")).count():
+        if args.clean:
+            repeated = archived.groupBy("run_id", "inspection_id").count().filter("count > 1")
+            if repeated.limit(1).count():
+                raise RuntimeError("Repeated inspection identity in the clean archive")
+            events = archived
+        else:
+            events = archived.select("event.*", "is_valid")
+        run = events.filter(F.col("run_id") == args.run_id)
+        if not args.clean and run.filter(~F.col("is_valid")).count():
             raise RuntimeError("Valid fixture records were marked invalid")
-        rows = run.groupBy("event.line_id").agg(
+        rows = run.groupBy("line_id").agg(
             F.count("*").alias("inspections"),
-            F.sum(F.col("event.is_reject").cast("int")).alias("rejects"),
+            F.sum(F.col("is_reject").cast("int")).alias("rejects"),
         ).collect()
         counts = {
             row.line_id: {"inspections": row.inspections, "rejects": row.rejects,

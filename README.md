@@ -6,7 +6,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 ## Current stage
 
-The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming now validates these messages and archives them in Parquet, including invalid payloads with error reasons. Deduplication and quality windows are next. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
+The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming now validates these messages and archives them in Parquet, including invalid payloads with error reasons. A separate streaming job now filters valid inspections and deduplicates them into a clean Parquet archive. Quality windows are next. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
 
 ## Roadmap
 
@@ -14,7 +14,8 @@ The local Spark setup, an [inspection event format](docs/event-schema.md), and a
 - [x] Versioned inspection contract, validator, deterministic sample, and unit tests.
 - [x] Local Kafka broker, inspection producer, and broker round-trip check.
 - [x] Read Kafka events with Spark Structured Streaming; validate and retain invalid records with error reasons.
-- [ ] Add deduplication, event-time windows, watermarks, and correctness checks against fixture totals.
+- [x] Deduplicate valid inspections within an event-time watermark into clean Parquet.
+- [ ] Add event-time quality windows and reconcile their counts against the fixture.
 - [x] Store raw inspection history in Parquet with persistent ingestion checkpoints.
 - [ ] Add historical queries and quality alerts.
 - [ ] Run MVTec AD images through PatchCore with a separately evaluated threshold.
@@ -31,7 +32,7 @@ docker compose run --build --rm kafka-check
 
 Compose starts a single Kafka broker and creates the `inspections` topic with two partitions and replication factor 1. The first command publishes 120 inspections and prints the run ID only after every message is acknowledged. The second command publishes its own fresh run, reads it back, and checks IDs, line keys, and fixture totals (A: 60/6; B: 60/12). It exits nonzero on a delivery error, timeout, or mismatched result. Repeating the check works with existing topic history.
 
-The producer uses `line_id` as the Kafka key; keys can share a partition. Each invocation gets a fresh run ID and distinct inspection/product IDs. To deliberately replay the same logical inspections, use `docker compose run --rm producer --run-id example-run` twice. Idempotence covers producer retries within a session; separate invocations can append duplicates, and downstream deduplication is still planned.
+The producer uses `line_id` as the Kafka key; keys can share a partition. Each invocation gets a fresh run ID and distinct inspection/product IDs. To deliberately replay the same logical inspections, use `docker compose run --rm producer --run-id example-run` twice. Idempotence covers producer retries within a session; separate invocations can append duplicates, and the clean-archive step removes duplicates within its documented watermark horizon.
 
 `published_at` is set from the wall clock before each message is enqueued. `event_time` keeps the synthetic fixture time; image paths and predictions remain placeholders. This is a finite replay, without traffic pacing or image inference. Publication acknowledgement does not measure aggregate or dashboard latency.
 
@@ -66,6 +67,30 @@ docker compose run --rm --no-deps --entrypoint /opt/spark/bin/spark-submit spark
 
 This explicitly invoked integration check verifies fixture totals and that each Kafka topic/partition/offset appears only once. After rerunning ingestion with the same checkpoint and no new input, it should still pass. It does not claim logical inspection deduplication or fault tolerance across every kind of failure. Raw payloads and volumes are local runtime data, not Git artifacts.
 
+## Deduplicate valid inspections
+
+After ingestion has created the raw archive, run:
+
+```bash
+docker compose run --build --rm spark-deduplicate --once
+```
+
+This reads `/data/raw`, filters `is_valid=true`, converts `event_time` to a Spark timestamp in UTC, and deduplicates by `(run_id, inspection_id)` using a two-minute event-time watermark. Validated event fields are flattened in `/data/clean`, with the original topic/partition/offset and ingestion timestamp retained. Raw history, including invalid messages and repeated inspections, is unchanged.
+
+The deduplication job has its own persistent checkpoint at `/data/checkpoints/deduplicate`. Omit `--once` for ongoing file-stream processing. Run only one job per checkpoint; keep its input, output, checkpoint, and shuffle settings consistent on restart. The local job uses two shuffle partitions. No Kafka connector is needed for this file-to-file stage.
+
+For the sample run from the ingestion example, reuse the existing check:
+
+```bash
+docker compose run --rm --no-deps --entrypoint /opt/spark/bin/spark-submit spark-ingest --master 'local[2]' /app/quality_monitor/archive_check.py --path /data/clean --clean --run-id archive-demo-1
+```
+
+`--clean` checks the flattened fields and also rejects repeated logical inspection identities. The expected sample still has 120 inspections: A=60/6 and B=60/12. This check is explicitly invoked, not part of the fast unit suite.
+
+To exercise duplicates, publish ten existing IDs with the same run ID using `publish_events` and the first ten records from `prepare_events`, then run ingestion and deduplication again. A separate producer invocation updates publication time but preserves those logical identities. Raw history grows; clean counts should remain unchanged while the IDs remain within the deduplication horizon. The original event time must be preserved for these retries.
+
+The watermark uses the largest event time seen across the stream, not elapsed wall-clock time or a separate clock for each run. It bounds state, so this is not permanent uniqueness enforcement: sufficiently old records can be dropped and identities can be forgotten. Replaying older synthetic dates after newer data has advanced the watermark is outside the guaranteed range; use a separate raw input/output/checkpoint set for an isolated historical experiment. Conflicting predictions with the same logical identity are not reconciled; do not use duplicate IDs for a new inference result. Progress/control records and window finalization remain planned with quality windows.
+
 ## Run the Spark check
 
 Requirements: Docker Engine or Docker Desktop with Linux containers, and Docker Compose v2. On Windows, run the commands from WSL with Docker integration enabled.
@@ -99,7 +124,7 @@ python3 -m unittest discover -s tests -v
 No additional Python dependencies are needed for unit tests. They cover sample totals, invalid inputs, run identities, publication timestamps, and delivery-error handling with a fake producer. The real broker is tested separately with `kafka-check`. See [the event format](docs/event-schema.md) for the fields and generator command. Scores and image paths in this sample are placeholders.
 
 ## Next steps
-- Add bounded inspection deduplication and event-time quality windows over the archive.
+- Add event-time quality windows over the clean archive.
 - Add visual anomaly detection with MVTec AD images and PatchCore.
 - Build the dashboard and measure correctness, throughput, and delays.
 
@@ -109,6 +134,8 @@ On 7 November 2026, all five unit tests and the Kafka round-trip check passed us
 
 On 8 November 2026, the five existing unit checks passed. The Kafka-to-Parquet check preserved 120 valid inspections (A: 60/6, B: 60/12) and two deliberately invalid messages (malformed JSON and an integer in `is_reject`). Resuming with the same checkpoint, including after a normal broker restart, preserved these results without repeated Kafka offsets. The archive check can inspect injected invalid messages with `--invalid-key KEY --expected-invalid COUNT`.
 
+Also on 8 November 2026, a separate run added 120 inspections and ten repeats, followed by another ten repeats after deduplication restarted with its existing checkpoint. Clean fixture totals remained A=60/6 and B=60/12. Raw history held 140 records for that run; clean history held 120, with no invalid source records carried over. These checks cover duplicates within the configured watermark range, not behavior after state eviction.
+
 The Spark image and Kafka connector are pinned to version 4.0.2. Model dependencies will be pinned when inference is added.
 
 ## References
@@ -117,5 +144,6 @@ The Spark image and Kafka connector are pinned to version 4.0.2. Model dependenc
 - [Apache Kafka Docker setup](https://kafka.apache.org/41/getting-started/docker/)
 - [Confluent Python producer documentation](https://docs.confluent.io/kafka-clients/python/current/overview.html)
 - [Spark–Kafka integration](https://spark.apache.org/docs/4.0.2/streaming/structured-streaming-kafka-integration.html)
+- [Spark bounded deduplication](https://spark.apache.org/docs/4.0.2/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.dropDuplicatesWithinWatermark.html)
 - [Spark 4.0.2 documentation](https://spark.apache.org/docs/4.0.2/)
 - [MVTec AD dataset](https://www.mvtec.com/research-teaching/datasets/mvtec-ad)
