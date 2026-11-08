@@ -52,6 +52,29 @@ services:
     entrypoint: ["python", "-m", "quality_monitor.kafka_check"]
     command: ["--bootstrap-servers", "kafka:19092"]
 
+  spark-ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - archive-data:/data
+    environment:
+      SPARK_LOCAL_IP: 127.0.0.1
+    entrypoint:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - local[2]
+      - --packages
+      - org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.2
+      - --conf
+      - spark.jars.ivy=/data/ivy
+      - --conf
+      - spark.ui.enabled=false
+      - /app/quality_monitor/ingest.py
+
   spark-check:
     image: apache/spark:4.0.2
     working_dir: /app
@@ -69,3 +92,4 @@ services:
 
 volumes:
   kafka-data:
+  archive-data:

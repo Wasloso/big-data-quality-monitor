@@ -7,3 +7,4 @@
 !tests/fixtures/
 !tests/fixtures/*.json
 !tests/fixtures/*.jsonl
+!Dockerfile.spark

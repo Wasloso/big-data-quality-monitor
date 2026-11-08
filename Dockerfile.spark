@@ -1,0 +1,8 @@
+FROM apache/spark:4.0.2
+USER root
+RUN mkdir -p /data && chown spark /data
+USER spark
+WORKDIR /app
+ENV PYTHONPATH=/app
+COPY quality_monitor ./quality_monitor
+COPY tests/fixtures ./tests/fixtures
