@@ -91,6 +91,22 @@ services:
       - spark.ui.enabled=false
       - /app/quality_monitor/deduplicate.py
 
+  spark-windows:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    volumes:
+      - archive-data:/data
+    environment:
+      SPARK_LOCAL_IP: 127.0.0.1
+    entrypoint:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - local[2]
+      - --conf
+      - spark.ui.enabled=false
+      - /app/quality_monitor/windows.py
+
   spark-check:
     image: apache/spark:4.0.2
     working_dir: /app

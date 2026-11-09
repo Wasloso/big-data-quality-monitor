@@ -6,7 +6,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 ## Current stage
 
-The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming now validates these messages and archives them in Parquet, including invalid payloads with error reasons. A separate streaming job now filters valid inspections and deduplicates them into a clean Parquet archive. Quality windows are next. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
+The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming validates these messages and archives them in Parquet, including invalid payloads with error reasons. Separate streaming jobs deduplicate valid inspections into clean Parquet and preview provisional quality windows in the console. Window finalization is next. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
 
 ## Roadmap
 
@@ -15,7 +15,8 @@ The local Spark setup, an [inspection event format](docs/event-schema.md), and a
 - [x] Local Kafka broker, inspection producer, and broker round-trip check.
 - [x] Read Kafka events with Spark Structured Streaming; validate and retain invalid records with error reasons.
 - [x] Deduplicate valid inspections within an event-time watermark into clean Parquet.
-- [ ] Add event-time quality windows and reconcile their counts against the fixture.
+- [x] Display provisional event-time quality windows from the clean archive.
+- [ ] Finalize quality windows with progress records and verify delayed arrivals.
 - [x] Store raw inspection history in Parquet with persistent ingestion checkpoints.
 - [ ] Add historical queries and quality alerts.
 - [ ] Run MVTec AD images through PatchCore with a separately evaluated threshold.
@@ -99,6 +100,20 @@ To exercise duplicates, publish ten existing IDs with the same run ID using `pub
 
 The watermark uses the largest event time seen across the stream, not elapsed wall-clock time or a separate clock for each run. It bounds state, so this is not permanent uniqueness enforcement: sufficiently old records can be dropped and identities can be forgotten. Replaying older synthetic dates after newer data has advanced the watermark is outside the guaranteed range; use a separate raw input/output/checkpoint set for an isolated historical experiment. Conflicting predictions with the same logical identity are not reconciled; do not use duplicate IDs for a new inference result. Progress/control records and window finalization remain planned with quality windows.
 
+## Preview quality windows
+
+After deduplication has created the clean archive, run:
+
+```bash
+docker compose run --build --rm spark-windows --once
+```
+
+Omit `--once` to process new clean files every five seconds. The job groups inspections into non-overlapping one-minute UTC event-time windows, separately by run, line, category, model version, and threshold version. It prints inspection counts, predicted reject counts, and predicted reject rates in console update mode. The sample's minute should show A=60/6 (0.10) and B=60/12 (0.20).
+
+`--window '30 seconds'` and `--lateness '2 minutes'` configure the window and watermark allowance. The default checkpoint is `/data/checkpoints/windows`; use one writer per checkpoint and keep the input, grouping, window, watermark, and shuffle settings consistent on restart. Use a separate checkpoint when changing query settings.
+
+Console rows are provisional snapshots, not increments to sum, final results, or a durable serving view. A restart resumes processing without reprinting all past rows. The console shows at most 20 changed rows per batch and is intended for small demos. A finite or idle stream does not advance its watermark by wall-clock time; explicit progress records and finalization checks are still planned. The query currently accepts the inspection-only clean schema. SQLite persistence and alerts come later.
+
 ## Run the Spark check
 
 Requirements: Docker Engine or Docker Desktop with Linux containers, and Docker Compose v2. On Windows, run the commands from WSL with Docker integration enabled.
@@ -132,7 +147,7 @@ python3 -m unittest discover -s tests -v
 No additional Python dependencies are needed for unit tests. They cover sample totals, invalid inputs, run identities, publication timestamps, and delivery-error handling with a fake producer. The real broker is tested separately with `kafka-check`. See [the event format](docs/event-schema.md) for the fields and generator command. Scores and image paths in this sample are placeholders.
 
 ## Next steps
-- Add event-time quality windows over the clean archive.
+- Add explicit progress records, finalize quality windows, and verify delayed arrivals.
 - Add visual anomaly detection with MVTec AD images and PatchCore.
 - Build the dashboard and measure correctness, throughput, and delays.
 
