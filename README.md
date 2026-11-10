@@ -6,7 +6,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 ## Current stage
 
-The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming validates these messages and archives them in Parquet, including invalid payloads with error reasons. Separate streaming jobs deduplicate valid records into clean Parquet and display provisional or finalized quality windows in the console. Explicit progress controls close finite runs. SQLite persistence and alerts are next. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
+The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming validates these messages and archives them in Parquet, including invalid payloads with error reasons. Separate streaming jobs deduplicate valid records into clean Parquet and display provisional or finalized quality windows. Explicit progress controls close finite runs. A SQLite sink now persists window snapshots and threshold alert status, and a local MVTec manifest tool prepares reproducible splits. Execution checks for these C07/C09 additions remain pending. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
 
 ## Roadmap
 
@@ -18,7 +18,9 @@ The local Spark setup, an [inspection event format](docs/event-schema.md), and a
 - [x] Display provisional event-time quality windows from the clean archive.
 - [x] Finalize quality windows with progress records and verify delayed arrivals.
 - [x] Store raw inspection history in Parquet with persistent ingestion checkpoints.
-- [ ] Add historical queries and quality alerts.
+- [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; integration verification pending).
+- [x] Implement reproducible local MVTec manifests and split integrity checking (C09; local dataset execution pending).
+- [ ] Add historical queries and reconciliation.
 - [ ] Run MVTec AD images through PatchCore with a separately evaluated threshold.
 - [ ] Build a Streamlit dashboard and evaluate correctness, throughput, and delays.
 
@@ -112,7 +114,7 @@ Omit `--once` to process new clean files every five seconds. The job groups insp
 
 `--window '30 seconds'` and `--lateness '2 minutes'` configure the window and watermark allowance. The default checkpoint is `/data/checkpoints/windows-v2-preview`, or `/data/checkpoints/windows-v2-final` with `--final`; use one writer per checkpoint and keep the input, mode, grouping, window, watermark, and shuffle settings consistent on restart. Use a separate checkpoint when changing query settings. The earlier `/data/checkpoints/windows` belongs to the inspection-only aggregate state: do not reuse it with this version. Keep old outputs/checkpoints for inspection; replay into new state deliberately rather than deleting existing runtime data.
 
-Default console rows are provisional snapshots, not increments to sum. Add `--final` to emit only watermark-finalized windows using append mode. Controls contribute zero counts; control-only windows are suppressed after aggregation. A restart resumes processing without reprinting all past rows. The console shows at most 20 rows per batch and is intended for small demos, not durable serving. A finite or idle stream does not advance its watermark by wall-clock time. SQLite persistence and alerts come later.
+Default console rows are provisional snapshots, not increments to sum. Add `--final` to emit only watermark-finalized windows using append mode. Controls contribute zero counts; control-only windows are suppressed after aggregation. A restart resumes processing without reprinting all past rows. The console shows at most 20 rows per batch and is intended for small demos, not durable serving. A finite or idle stream does not advance its watermark by wall-clock time. Add `--database /data/serving/quality.sqlite` to persist snapshots and rule statuses; see [the serving-store instructions](docs/serving-store.md).
 
 ## Close a finite fixture run
 
@@ -155,6 +157,8 @@ The scenario injects ten duplicates and two invalid payloads, holds back two rej
 
 ## Run the Spark check
 
+For the C07 SQLite writer, retry contract, rule statuses, and CLI options, see [the serving-store instructions](docs/serving-store.md). For C09 dataset layout, manifest commands, exact validation split policy, and source attribution, see [the local MVTec manifest instructions](docs/data-manifest.md). Both additions use standard-library Python alongside the existing Spark environment; no model dependency or dataset download is required to import their helper modules.
+
 Requirements: Docker Engine or Docker Desktop with Linux containers, and Docker Compose v2. On Windows, run the commands from WSL with Docker integration enabled.
 
 From the repository root:
@@ -186,7 +190,8 @@ python3 -m unittest discover -s tests -v
 No additional Python dependencies are needed for unit tests. They cover sample totals, invalid inputs, run identities, publication timestamps, and delivery-error handling with a fake producer. The real broker is tested separately with `kafka-check`. See [the event format](docs/event-schema.md) for the fields and generator command. Scores and image paths in this sample are placeholders.
 
 ## Next steps
-- Persist quality windows and deterministic threshold alerts in SQLite (C07).
+- Run the deferred C07 sink/recovery checks and C09 manifest creation on local data.
+- Display stored quality windows and alerts in Streamlit (C08).
 - Add visual anomaly detection with MVTec AD images and PatchCore.
 - Build the dashboard and measure correctness, throughput, and delays.
 

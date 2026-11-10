@@ -1,11 +1,11 @@
 # Inspection events, version 1
 
-One JSON object per line. `quality_monitor.events.parse_event` decodes and validates it; invalid input raises `ValueError`. Only inspection records are implemented at this stage. Progress/control records will be added with event-time aggregation.
+One JSON object per line. `quality_monitor.events.parse_event` decodes and validates it; invalid input raises `ValueError`. Version 1 supports inspections and explicit progress controls.
 
 | Field | Type and meaning |
 | --- | --- |
 | `schema_version` | Integer `1`; booleans are not valid versions. |
-| `record_kind` | String `inspection`. |
+| `record_kind` | String `inspection` or `progress`. |
 | `inspection_id` | Non-empty string; unique within a run. Preserve it when retrying the same inspection. |
 | `run_id`, `scenario_id` | Non-empty strings identifying the run and scenario. |
 | `product_id` | Non-empty string identifying the inspected product. |
@@ -17,7 +17,15 @@ One JSON object per line. `quality_monitor.events.parse_event` decodes and valid
 | `is_reject` | JSON boolean; strings and integers are rejected. |
 | `model_version`, `threshold_version` | Non-empty strings identifying the detector and its decision rule. |
 
-All fields above are required. Extra fields are currently allowed. Identity uniqueness is checked across a run, not by the single-event validator. Paths need not exist during fixture tests; real image loading belongs to the inference stage. The validator does not recalculate model decisions from scores.
+For inspections, all fields above are required. For progress controls, `product_id`, `image_id`, `image_uri`, `anomaly_score`, and `is_reject` must be null or absent; all other fields remain required. A control has a distinct `inspection_id` and the same run/line/category/model/threshold metadata as its active group. It carries no prediction and represents no inspected product. Extra fields are currently allowed. Identity uniqueness is checked across a run, not by the single-event validator. Paths need not exist during fixture tests; real image loading belongs to the inference stage. The validator does not recalculate model decisions from scores.
+
+## Progress and event-time completion
+
+For a finite run, drain all intended inspections through Q1, Q2, and Q3 before publishing one control per active group. A control timestamp strictly beyond the last window end plus the lateness allowance advances event time in both stateful queries. With the fixture minute ending at `12:01:00Z` and the default two-minute allowance, use `12:04:00Z`. `published_at` is still the actual publication time.
+
+Controls pass validation and bounded deduplication, but contribute zero inspections and zero rejects. Control-only windows are filtered after aggregation, so controls still advance its watermark. They produce no quality output. Progress is a promise by the replay coordinator: do not send it while intended inspections are still buffered upstream. A Kafka acknowledgement alone is insufficient. Drain the stages in order as shown in README; do not mix a closure control and undrained historical inspections in one file-stream catch-up batch.
+
+The watermark is global across runs/groups. Isolate historical replays using separate raw, clean, and checkpoint paths. A stopped live stream can leave windows pending indefinitely; wall-clock time does not finalize them. Input within the allowance can update an open window. Older input is outside the guarantee and may be excluded by Q2 or Q3; a finalized window cannot be revised. Do not assume every beyond-watermark input is always dropped under every batching arrangement.
 
 ## Repeatable sample
 
