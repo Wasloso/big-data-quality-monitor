@@ -5,6 +5,17 @@ import argparse
 from pyspark.sql import SparkSession, functions as F
 
 
+def clean_records(raw):
+    # Controls must reach both stateful stages to advance their event-time watermarks.
+    return (
+        raw.filter("is_valid")
+        .select("event.*", "topic", "partition", "offset", "ingested_at")
+        .withColumn("event_time", F.to_timestamp("event_time"))
+        .withWatermark("event_time", "2 minutes")
+        .dropDuplicatesWithinWatermark(["run_id", "inspection_id"])
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", default="/data/raw")
@@ -23,13 +34,7 @@ def main():
         # Ingestion must have written at least one raw file before this job starts.
         schema = spark.read.parquet(args.input).schema
         raw = spark.readStream.schema(schema).parquet(args.input)
-        clean = (
-            raw.filter("is_valid")
-            .select("event.*", "topic", "partition", "offset", "ingested_at")
-            .withColumn("event_time", F.to_timestamp("event_time"))
-            .withWatermark("event_time", "2 minutes")
-            .dropDuplicatesWithinWatermark(["run_id", "inspection_id"])
-        )
+        clean = clean_records(raw)
         writer = (
             clean.writeStream.format("parquet").outputMode("append")
             .option("path", args.output)

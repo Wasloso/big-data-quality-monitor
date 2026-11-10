@@ -14,10 +14,14 @@ def validate_event(event):
         raise ValueError("An inspection must be a JSON object")
     if type(event.get("schema_version")) is not int or event["schema_version"] != 1:
         raise ValueError("schema_version must be 1")
-    if event.get("record_kind") != "inspection":
-        raise ValueError("Only inspection records are supported for now")
+    if event.get("record_kind") not in ("inspection", "progress"):
+        raise ValueError("record_kind must be inspection or progress")
 
     for name in TEXT_FIELDS:
+        if event["record_kind"] == "progress" and name in ("product_id", "image_id", "image_uri"):
+            if event.get(name) is not None:
+                raise ValueError(f"{name} must be null or absent for progress records")
+            continue
         value = event.get(name)
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{name} must be a non-empty string")
@@ -32,6 +36,11 @@ def validate_event(event):
             raise ValueError(f"{name} must be a UTC timestamp") from error
         if timestamp.utcoffset() != timedelta(0):
             raise ValueError(f"{name} must include a UTC offset")
+
+    if event["record_kind"] == "progress":
+        if event.get("anomaly_score") is not None or event.get("is_reject") is not None:
+            raise ValueError("Progress records must not contain predictions")
+        return
 
     score = event.get("anomaly_score")
     if type(score) not in (int, float):

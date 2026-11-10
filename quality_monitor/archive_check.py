@@ -34,6 +34,7 @@ def main():
         run = events.filter(F.col("run_id") == args.run_id)
         if not args.clean and run.filter(~F.col("is_valid")).count():
             raise RuntimeError("Valid fixture records were marked invalid")
+        run = run.filter(F.col("record_kind") == "inspection")
         rows = run.groupBy("line_id").agg(
             F.count("*").alias("inspections"),
             F.sum(F.col("is_reject").cast("int")).alias("rejects"),

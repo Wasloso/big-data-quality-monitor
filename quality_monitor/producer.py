@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from quality_monitor.events import validate_event
-from quality_monitor.sample import sample_events
+from quality_monitor.sample import progress_events, sample_events
 
 
 def prepare_events(run_id):
@@ -90,16 +90,29 @@ def main():
     parser = argument_parser(__doc__)
     parser.add_argument("--run-id", default=None)
     parser.add_argument(
+        "--progress-at", default=None, metavar="UTC_TIMESTAMP",
+        help="Publish only progress controls for an explicit run ID, after inspections have drained",
+    )
+    parser.add_argument(
         "--rate", type=positive_rate, default=None,
         help="Target inspections per second across all lines; omit for an unpaced replay",
     )
     args = parser.parse_args()
+    if args.progress_at and not args.run_id:
+        parser.error("--progress-at requires the original --run-id")
     run_id = args.run_id or str(uuid4())
+    events = prepare_events(run_id)
+    if args.progress_at:
+        try:
+            events = list(progress_events(events, args.progress_at))
+        except ValueError as error:
+            parser.error(str(error))
     delivered = publish_events(
-        make_producer(args.bootstrap_servers), prepare_events(run_id), args.topic,
+        make_producer(args.bootstrap_servers), events, args.topic,
         rate=args.rate,
     )
-    print(f"Published {delivered} inspections to {args.topic}; run_id={run_id}")
+    kind = "progress records" if args.progress_at else "inspections"
+    print(f"Published {delivered} {kind} to {args.topic}; run_id={run_id}")
 
 
 if __name__ == "__main__":

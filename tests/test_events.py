@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from quality_monitor.events import parse_event, validate_event
-from quality_monitor.sample import sample_events
+from quality_monitor.sample import progress_events, sample_events
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -26,13 +26,20 @@ class InspectionTests(unittest.TestCase):
         self.assertEqual(counts, expected)
         self.assertEqual(len({event["inspection_id"] for event in events}), 120)
         self.assertEqual(events, list(sample_events()))
+        controls = list(progress_events(events, "2026-11-07T12:04:00+00:00"))
+        self.assertEqual({e["line_id"] for e in controls}, {"A", "B"})
+        self.assertEqual(len({e["inspection_id"] for e in controls}), 2)
+        for control in controls:
+            self.assertEqual(parse_event(json.dumps(control)), control)
 
     def test_invalid_payloads_are_rejected(self):
         valid = next(sample_events())
         invalid = [
             {**valid, "schema_version": 2},
             {**valid, "schema_version": True},
+            {**valid, "record_kind": "unknown"},
             {**valid, "record_kind": "progress"},
+            {**next(progress_events([valid], valid["event_time"])), "is_reject": False},
             {**valid, "inspection_id": " "},
             {**valid, "event_time": "not a date"},
             {**valid, "published_at": "2026-11-07T12:00:00"},
