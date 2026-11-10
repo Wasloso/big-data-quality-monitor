@@ -6,3 +6,4 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 COPY quality_monitor ./quality_monitor
 COPY tests/fixtures ./tests/fixtures
+COPY scripts ./scripts

@@ -6,7 +6,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 ## Current stage
 
-The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming validates these messages and archives them in Parquet, including invalid payloads with error reasons. Separate streaming jobs deduplicate valid inspections into clean Parquet and preview provisional quality windows in the console. Window finalization is next. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
+The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming validates these messages and archives them in Parquet, including invalid payloads with error reasons. Separate streaming jobs deduplicate valid records into clean Parquet and display provisional or finalized quality windows in the console. Explicit progress controls close finite runs. SQLite persistence and alerts are next. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ The local Spark setup, an [inspection event format](docs/event-schema.md), and a
 - [x] Read Kafka events with Spark Structured Streaming; validate and retain invalid records with error reasons.
 - [x] Deduplicate valid inspections within an event-time watermark into clean Parquet.
 - [x] Display provisional event-time quality windows from the clean archive.
-- [ ] Finalize quality windows with progress records and verify delayed arrivals.
+- [x] Finalize quality windows with progress records and verify delayed arrivals.
 - [x] Store raw inspection history in Parquet with persistent ingestion checkpoints.
 - [ ] Add historical queries and quality alerts.
 - [ ] Run MVTec AD images through PatchCore with a separately evaluated threshold.
@@ -98,7 +98,7 @@ docker compose run --rm --no-deps --entrypoint /opt/spark/bin/spark-submit spark
 
 To exercise duplicates, publish ten existing IDs with the same run ID using `publish_events` and the first ten records from `prepare_events`, then run ingestion and deduplication again. A separate producer invocation updates publication time but preserves those logical identities. Raw history grows; clean counts should remain unchanged while the IDs remain within the deduplication horizon. The original event time must be preserved for these retries.
 
-The watermark uses the largest event time seen across the stream, not elapsed wall-clock time or a separate clock for each run. It bounds state, so this is not permanent uniqueness enforcement: sufficiently old records can be dropped and identities can be forgotten. Replaying older synthetic dates after newer data has advanced the watermark is outside the guaranteed range; use a separate raw input/output/checkpoint set for an isolated historical experiment. Conflicting predictions with the same logical identity are not reconciled; do not use duplicate IDs for a new inference result. Progress/control records and window finalization remain planned with quality windows.
+The watermark uses the largest event time seen across the stream, not elapsed wall-clock time or a separate clock for each run. It bounds state, so this is not permanent uniqueness enforcement: sufficiently old records can be dropped and identities can be forgotten. Replaying older synthetic dates after newer data has advanced the watermark is outside the guaranteed range; use a separate raw input/output/checkpoint set for an isolated historical experiment. Conflicting predictions with the same logical identity are not reconciled; do not use duplicate IDs for a new inference result. Progress controls pass through deduplication with their own identities and never contribute to quality counts.
 
 ## Preview quality windows
 
@@ -110,9 +110,48 @@ docker compose run --build --rm spark-windows --once
 
 Omit `--once` to process new clean files every five seconds. The job groups inspections into non-overlapping one-minute UTC event-time windows, separately by run, line, category, model version, and threshold version. It prints inspection counts, predicted reject counts, and predicted reject rates in console update mode. The sample's minute should show A=60/6 (0.10) and B=60/12 (0.20).
 
-`--window '30 seconds'` and `--lateness '2 minutes'` configure the window and watermark allowance. The default checkpoint is `/data/checkpoints/windows`; use one writer per checkpoint and keep the input, grouping, window, watermark, and shuffle settings consistent on restart. Use a separate checkpoint when changing query settings.
+`--window '30 seconds'` and `--lateness '2 minutes'` configure the window and watermark allowance. The default checkpoint is `/data/checkpoints/windows-v2-preview`, or `/data/checkpoints/windows-v2-final` with `--final`; use one writer per checkpoint and keep the input, mode, grouping, window, watermark, and shuffle settings consistent on restart. Use a separate checkpoint when changing query settings. The earlier `/data/checkpoints/windows` belongs to the inspection-only aggregate state: do not reuse it with this version. Keep old outputs/checkpoints for inspection; replay into new state deliberately rather than deleting existing runtime data.
 
-Console rows are provisional snapshots, not increments to sum, final results, or a durable serving view. A restart resumes processing without reprinting all past rows. The console shows at most 20 changed rows per batch and is intended for small demos. A finite or idle stream does not advance its watermark by wall-clock time; explicit progress records and finalization checks are still planned. The query currently accepts the inspection-only clean schema. SQLite persistence and alerts come later.
+Default console rows are provisional snapshots, not increments to sum. Add `--final` to emit only watermark-finalized windows using append mode. Controls contribute zero counts; control-only windows are suppressed after aggregation. A restart resumes processing without reprinting all past rows. The console shows at most 20 rows per batch and is intended for small demos, not durable serving. A finite or idle stream does not advance its watermark by wall-clock time. SQLite persistence and alerts come later.
+
+## Close a finite fixture run
+
+Use an isolated topic and paths for each historical replay. Start Q3 in final mode in another terminal after the initial clean archive exists, **before publishing controls**. This lets it consume inspections before later progress advances its watermark. For example, use `c06-demo-1` as a new topic, experiment directory, and run ID (choose a new name if it already exists):
+
+```bash
+docker compose run --rm kafka-init --bootstrap-server kafka:19092 --create --if-not-exists --topic c06-demo-1 --partitions 2 --replication-factor 1
+docker compose run --build --rm producer --topic c06-demo-1 --run-id c06-demo-1
+docker compose run --build --rm spark-ingest --topic c06-demo-1 --output /data/c06-demo-1/raw --checkpoint /data/c06-demo-1/q1 --once
+docker compose run --build --rm spark-deduplicate --input /data/c06-demo-1/raw --output /data/c06-demo-1/clean --checkpoint /data/c06-demo-1/q2 --once
+```
+
+In the second terminal, keep this running; wait for the initial batch to finish before continuing in the first terminal. No finalized fixture row is expected yet:
+
+```bash
+docker compose run --build --rm spark-windows --input /data/c06-demo-1/clean --checkpoint /data/c06-demo-1/q3-final --final
+```
+
+Back in the first terminal, publish controls for the same run and drain upstream stages in order:
+
+```bash
+docker compose run --build --rm producer --topic c06-demo-1 --run-id c06-demo-1 --progress-at '2026-11-07T12:04:00Z'
+docker compose run --rm spark-ingest --topic c06-demo-1 --output /data/c06-demo-1/raw --checkpoint /data/c06-demo-1/q1 --once
+docker compose run --rm spark-deduplicate --input /data/c06-demo-1/raw --output /data/c06-demo-1/clean --checkpoint /data/c06-demo-1/q2 --once
+```
+
+Q3 should print two finalized rows for `12:00–12:01 UTC`: A=60/6 (0.10), B=60/12 (0.20). The dedicated topic keeps previous runs and their progress controls out of this replay. A control timestamp must be strictly beyond the evaluated window end plus Q3's allowance, and beyond Q2's watermark horizon; `12:04Z` covers this fixture with the default settings. Do not publish controls while intended records remain undrained in any stage, and do not start final Q3 for the first time over an archive already containing both historical inspections and closure controls. File enumeration is not a replay-order guarantee. Controls never imply completed inference or production health.
+
+## Check window correctness and delayed arrivals
+
+Run the explicitly invoked integration scenario (separate from unit tests):
+
+```bash
+docker compose run --build --rm --no-deps --entrypoint /opt/spark/bin/spark-submit spark-windows --master 'local[2]' --conf spark.ui.enabled=false /app/scripts/check_pipeline.py
+```
+
+It uses the real Q1 validation transformation on Kafka-shaped rows, then separate Q2/Q3 file streams with persistent checkpoints. It requires no broker and does not test Kafka transport or crash recovery. Each invocation retains artifacts and `result.json` in a new `/data/c06-check-<id>` directory in `archive-data`.
+
+The scenario injects ten duplicates and two invalid payloads, holds back two reject inspections, advances event time to `12:02:30Z`, then supplies those inspections at `12:00:40Z` within the allowance. Controls at `12:04Z` finalize the fixture minute. It compares the two final rows with the separate fixture oracle, checks window boundaries/group metadata and exclusion of control-only windows, then injects an older distinct inspection and verifies that closed results stay unchanged. It records whether that inspection survived Q2; it does not assume all beyond-watermark arrivals are dropped under every batching arrangement.
 
 ## Run the Spark check
 
@@ -147,7 +186,7 @@ python3 -m unittest discover -s tests -v
 No additional Python dependencies are needed for unit tests. They cover sample totals, invalid inputs, run identities, publication timestamps, and delivery-error handling with a fake producer. The real broker is tested separately with `kafka-check`. See [the event format](docs/event-schema.md) for the fields and generator command. Scores and image paths in this sample are placeholders.
 
 ## Next steps
-- Add explicit progress records, finalize quality windows, and verify delayed arrivals.
+- Persist quality windows and deterministic threshold alerts in SQLite (C07).
 - Add visual anomaly detection with MVTec AD images and PatchCore.
 - Build the dashboard and measure correctness, throughput, and delays.
 
@@ -158,6 +197,8 @@ On 7 November 2026, all five unit tests and the Kafka round-trip check passed us
 On 8 November 2026, the five existing unit checks passed. The Kafka-to-Parquet check preserved 120 valid inspections (A: 60/6, B: 60/12) and two deliberately invalid messages (malformed JSON and an integer in `is_reject`). Resuming with the same checkpoint, including after a normal broker restart, preserved these results without repeated Kafka offsets. The archive check can inspect injected invalid messages with `--invalid-key KEY --expected-invalid COUNT`.
 
 Also on 8 November 2026, a separate run added 120 inspections and ten repeats, followed by another ten repeats after deduplication restarted with its existing checkpoint. Clean fixture totals remained A=60/6 and B=60/12. Raw history held 140 records for that run; clean history held 120, with no invalid source records carried over. These checks cover duplicates within the configured watermark range, not behavior after state eviction.
+
+On 10 November 2026, `scripts/check_pipeline.py` passed on Spark 4.0.2 / Java 17.0.17, Docker Engine 28.5.1 / WSL2 amd64, with `local[2]` and two shuffle partitions. The observed Q3 watermark before the two delayed inspections was `2026-11-07T12:00:30.000Z`; both inspections at `12:00:40Z` were accepted. Four controls passed Q2; only the two fixture quality windows were finalized, matching A=60/6 (0.10) and B=60/12 (0.20). Ten duplicate injections did not add inspections, and two invalid payloads remained in raw history. The later beyond-allowance inspection was excluded by Q2 in this run and did not revise closed results. Artifacts and the measured summary remain in `archive-data:/data/c06-check-a62380f818ae400a969bdfbbb42089e1/result.json`. All five fast unit checks, Compose validation, and `git diff --check` also passed. This verifies C06's Spark behavior without a new Kafka round-trip, crash-recovery test, or peer review.
 
 The Spark image and Kafka connector are pinned to version 4.0.2. Model dependencies will be pinned when inference is added.
 

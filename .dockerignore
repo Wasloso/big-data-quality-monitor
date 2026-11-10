@@ -8,3 +8,5 @@
 !tests/fixtures/*.json
 !tests/fixtures/*.jsonl
 !Dockerfile.spark
+!scripts/
+!scripts/*.py
