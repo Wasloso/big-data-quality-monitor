@@ -1,8 +1,12 @@
 """Display provisional or finalized event-time quality windows."""
 
 import argparse
+import math
+from pathlib import Path
 
 from pyspark.sql import SparkSession, functions as F
+
+from quality_monitor.store import query_epoch, sqlite_sink
 
 
 def quality_windows(inspections, duration="1 minute", lateness="2 minutes"):
@@ -35,10 +39,26 @@ def main():
     parser.add_argument("--lateness", default="2 minutes")
     parser.add_argument("--final", action="store_true", help="Print only watermark-finalized windows (append mode)")
     parser.add_argument("--once", action="store_true", help="Drain available clean files and exit")
+    parser.add_argument("--database", help="Write aggregate snapshots and alerts to this local SQLite file")
+    parser.add_argument("--alert-threshold", type=float, default=0.15)
+    parser.add_argument("--minimum-inspections", type=int, default=30)
+    parser.add_argument("--max-store-rows", type=int, default=1000)
     args = parser.parse_args()
+    if not math.isfinite(args.alert_threshold) or not 0 <= args.alert_threshold <= 1:
+        parser.error("--alert-threshold must be finite and in [0, 1]")
+    if args.minimum_inspections < 1 or args.max_store_rows < 1:
+        parser.error("Inspection and aggregate-row limits must be positive")
     checkpoint = args.checkpoint or (
-        "/data/checkpoints/windows-v2-final" if args.final else "/data/checkpoints/windows-v2-preview"
+        f"/data/checkpoints/windows-v2-{'sqlite-' if args.database else ''}{'final' if args.final else 'preview'}"
     )
+    if args.database:
+        database = str(Path(args.database).resolve())
+        epoch = query_epoch(checkpoint, {
+            "query_version": 2, "input": str(Path(args.input).resolve()), "database": database,
+            "window": args.window, "lateness": args.lateness, "final": args.final,
+            "threshold": args.alert_threshold, "minimum": args.minimum_inspections,
+            "shuffle_partitions": 2,
+        })
     spark = (
         SparkSession.builder.appName("inspection-quality-windows")
         .config("spark.sql.session.timeZone", "UTC")
@@ -49,12 +69,16 @@ def main():
     try:
         schema = spark.read.parquet(args.input).schema
         inspections = spark.readStream.schema(schema).parquet(args.input)
-        writer = (
-            quality_windows(inspections, args.window, args.lateness)
-            .writeStream.format("console").outputMode("append" if args.final else "update")
-            .option("truncate", "false")
-            .option("checkpointLocation", checkpoint)
-        )
+        writer = quality_windows(inspections, args.window, args.lateness).writeStream.outputMode(
+            "append" if args.final else "update",
+        ).option("checkpointLocation", checkpoint)
+        if args.database:
+            writer = writer.foreachBatch(sqlite_sink(
+                database, epoch, threshold=args.alert_threshold, minimum=args.minimum_inspections,
+                final=args.final, max_rows=args.max_store_rows,
+            ))
+        else:
+            writer = writer.format("console").option("truncate", "false")
         if args.once:
             writer = writer.trigger(availableNow=True)
         else:
