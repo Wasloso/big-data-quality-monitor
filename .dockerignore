@@ -10,3 +10,5 @@
 !Dockerfile.spark
 !scripts/
 !scripts/*.py
+!Dockerfile.dashboard
+!requirements-dashboard.txt

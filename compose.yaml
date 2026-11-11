@@ -107,6 +107,22 @@ services:
       - spark.ui.enabled=false
       - /app/quality_monitor/windows.py
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - type: volume
+        source: archive-data
+        target: /data/serving
+        volume:
+          subpath: serving
+          nocopy: true
+    environment:
+      QUALITY_DATABASE: /data/serving/quality.sqlite
+
   spark-check:
     image: apache/spark:4.0.2
     working_dir: /app

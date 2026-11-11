@@ -6,7 +6,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 ## Current stage
 
-The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming validates these messages and archives them in Parquet, including invalid payloads with error reasons. Separate streaming jobs deduplicate valid records into clean Parquet and display provisional or finalized quality windows. Explicit progress controls close finite runs. A SQLite sink now persists window snapshots and threshold alert status, and a local MVTec manifest tool prepares reproducible splits. Execution checks for these C07/C09 additions remain pending. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
+The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming validates these messages and archives them in Parquet, including invalid payloads with error reasons. Separate streaming jobs deduplicate valid records into clean Parquet and display provisional or finalized quality windows. Explicit progress controls close finite runs. A SQLite sink now persists window snapshots and threshold alert status, and a local MVTec manifest tool prepares reproducible splits. A read-only Streamlit dashboard now displays stored windows and alert evaluations. The C07 store unit checks pass; a clean-archive-to-SQLite writer run is also checked. Full pipeline crash-recovery verification and C09 execution on actual local data remain pending. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
 
 ## Roadmap
 
@@ -18,11 +18,12 @@ The local Spark setup, an [inspection event format](docs/event-schema.md), and a
 - [x] Display provisional event-time quality windows from the clean archive.
 - [x] Finalize quality windows with progress records and verify delayed arrivals.
 - [x] Store raw inspection history in Parquet with persistent ingestion checkpoints.
-- [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; integration verification pending).
+- [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; full pipeline/recovery verification pending).
 - [x] Implement reproducible local MVTec manifests and split integrity checking (C09; local dataset execution pending).
 - [ ] Add historical queries and reconciliation.
 - [ ] Run MVTec AD images through PatchCore with a separately evaluated threshold.
-- [ ] Build a Streamlit dashboard and evaluate correctness, throughput, and delays.
+- [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.
+- [ ] Add real inspection-image previews and measure correctness, throughput, and delays.
 
 ## Publish inspections to Kafka
 
@@ -155,6 +156,22 @@ It uses the real Q1 validation transformation on Kafka-shaped rows, then separat
 
 The scenario injects ten duplicates and two invalid payloads, holds back two reject inspections, advances event time to `12:02:30Z`, then supplies those inspections at `12:00:40Z` within the allowance. Controls at `12:04Z` finalize the fixture minute. It compares the two final rows with the separate fixture oracle, checks window boundaries/group metadata and exclusion of control-only windows, then injects an older distinct inspection and verifies that closed results stay unchanged. It records whether that inspection survived Q2; it does not assume all beyond-watermark arrivals are dropped under every batching arrangement.
 
+## View stored quality results
+
+Create the SQLite serving database with the [window writer](docs/serving-store.md), then start the dashboard:
+
+```bash
+docker compose up --build -d dashboard
+```
+
+Open [localhost:8501](http://localhost:8501). This service publishes only to the local loopback address. It reads `/data/serving/quality.sqlite` through a read-only SQLite connection and a mount limited to the serving subdirectory; it does not start Kafka or Spark. Only the serving subdirectory is writable so SQLite can create WAL coordination sidecars; raw and clean history are not mounted into the dashboard. The application uses `mode=ro` and SELECT queries. The window writer must first create the serving directory, which the Docker volume subpath requires. If the directory exists but has no database or stored windows, the app displays a setup/no-data message rather than creating a database.
+
+Select a run, detector/category version, and line to see inspection/reject totals, a reject-rate trend, provisional/final window rows, and rule evaluations. Summaries use only the selected snapshots and detector version. Active rule results are shown separately from clear, resolved, or insufficient-data evaluations. Fixture model scores remain synthetic; there is no image inference or image viewer yet.
+
+The view refreshes every ten seconds and has a manual Refresh button. It shows the stored update timestamp and warns after five minutes without window updates; this can mean an idle source as well as stopped processing. It does not certify production health or count inspections that never reached the serving writer. Provisional windows can change; use the separate final writer/database described in the serving-store instructions for finalized-only results.
+
+This first view reads the small aggregate tables, not the raw inspection archive. It is intended for local demo data; pagination and larger-query tuning can follow measured need. To use another serving database inside the mounted volume, change the `QUALITY_DATABASE` setting. Keep database files outside Git.
+
 ## Run the Spark check
 
 For the C07 SQLite writer, retry contract, rule statuses, and CLI options, see [the serving-store instructions](docs/serving-store.md). For C09 dataset layout, manifest commands, exact validation split policy, and source attribution, see [the local MVTec manifest instructions](docs/data-manifest.md). Both additions use standard-library Python alongside the existing Spark environment; no model dependency or dataset download is required to import their helper modules.
@@ -191,9 +208,8 @@ No additional Python dependencies are needed for unit tests. They cover sample t
 
 ## Next steps
 - Run the deferred C07 sink/recovery checks and C09 manifest creation on local data.
-- Display stored quality windows and alerts in Streamlit (C08).
 - Add visual anomaly detection with MVTec AD images and PatchCore.
-- Build the dashboard and measure correctness, throughput, and delays.
+- Add real inspection-image previews and measure correctness, throughput, and delays.
 
 Checked on 6 November 2026 using Docker Engine 29.2.1 on WSL2 (Linux x86-64). The container reported Spark 4.0.2, Python 3.10.12, and Java 17.0.17.
 
@@ -204,6 +220,8 @@ On 8 November 2026, the five existing unit checks passed. The Kafka-to-Parquet c
 Also on 8 November 2026, a separate run added 120 inspections and ten repeats, followed by another ten repeats after deduplication restarted with its existing checkpoint. Clean fixture totals remained A=60/6 and B=60/12. Raw history held 140 records for that run; clean history held 120, with no invalid source records carried over. These checks cover duplicates within the configured watermark range, not behavior after state eviction.
 
 On 10 November 2026, `scripts/check_pipeline.py` passed on Spark 4.0.2 / Java 17.0.17, Docker Engine 28.5.1 / WSL2 amd64, with `local[2]` and two shuffle partitions. The observed Q3 watermark before the two delayed inspections was `2026-11-07T12:00:30.000Z`; both inspections at `12:00:40Z` were accepted. Four controls passed Q2; only the two fixture quality windows were finalized, matching A=60/6 (0.10) and B=60/12 (0.20). Ten duplicate injections did not add inspections, and two invalid payloads remained in raw history. The later beyond-allowance inspection was excluded by Q2 in this run and did not revise closed results. Artifacts and the measured summary remain in `archive-data:/data/c06-check-a62380f818ae400a969bdfbbb42089e1/result.json`. All five fast unit checks, Compose validation, and `git diff --check` also passed. This verifies C06's Spark behavior without a new Kafka round-trip, crash-recovery test, or peer review.
+
+On 11 November 2026, all seven existing unit checks and Compose validation passed. A temporary Streamlit AppTest smoke verified missing/empty database states, 120 inspections / 18 predicted rejects, run/line filtering, the B-line active alert, provisional/final labels, stale-data warnings, and reading the previous committed snapshot while a WAL writer held an uncommitted update. The local HTTP health endpoint returned 200. The existing Spark window writer then drained the local clean archive into the serving database; the dashboard read its serving-subdirectory mount through a read-only SQL connection and showed 120 inspections, 18 predicted rejects, and clear/active rule statuses for the selected fixture run. No UI test suite was added; this does not verify the full live Kafka-to-dashboard pipeline or real image inference.
 
 The Spark image and Kafka connector are pinned to version 4.0.2. Model dependencies will be pinned when inference is added.
 
