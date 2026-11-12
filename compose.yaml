@@ -123,6 +123,22 @@ services:
     environment:
       QUALITY_DATABASE: /data/serving/quality.sqlite
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - type: volume
+        source: archive-data
+        target: /data/serving
+        volume:
+          subpath: serving
+          nocopy: true
+    environment:
+      QUALITY_DATABASE: /data/serving/quality.sqlite
+
   spark-check:
     image: apache/spark:4.0.2
     working_dir: /app

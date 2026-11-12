@@ -12,3 +12,6 @@
 !scripts/*.py
 !Dockerfile.dashboard
 !requirements-dashboard.txt
+
+!Dockerfile.api
+!requirements-api.txt

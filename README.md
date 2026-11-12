@@ -2,7 +2,7 @@
 
 Project for the **Big Data in Industry 4.0** university course, developed by a three-person team.
 
-We want to monitor product quality across simulated production lines. A vision model will check product images, Kafka will carry inspection results, and Spark will calculate quality statistics. We plan to save inspection history in Parquet and display results in a Streamlit dashboard.
+We want to monitor product quality across simulated production lines. A vision model will check product images, Kafka will carry inspection results, and Spark will calculate quality statistics. Inspection history is stored in Parquet. We are moving from the existing Streamlit view to a small React dashboard backed by FastAPI, with continuous image-inspection stations planned next.
 
 ## Current stage
 
@@ -23,6 +23,8 @@ The local Spark setup, an [inspection event format](docs/event-schema.md), and a
 - [ ] Add historical queries and reconciliation.
 - [ ] Run MVTec AD images through PatchCore with a separately evaluated threshold.
 - [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.
+- [x] Add a bounded read-only FastAPI view of existing quality results (UI1).
+- [ ] Add the React station interface, continuous station processes and persisted simulated context.
 - [ ] Add real inspection-image previews and measure correctness, throughput, and delays.
 
 ## Publish inspections to Kafka
@@ -155,6 +157,10 @@ docker compose run --build --rm --no-deps --entrypoint /opt/spark/bin/spark-subm
 It uses the real Q1 validation transformation on Kafka-shaped rows, then separate Q2/Q3 file streams with persistent checkpoints. It requires no broker and does not test Kafka transport or crash recovery. Each invocation retains artifacts and `result.json` in a new `/data/c06-check-<id>` directory in `archive-data`.
 
 The scenario injects ten duplicates and two invalid payloads, holds back two reject inspections, advances event time to `12:02:30Z`, then supplies those inspections at `12:00:40Z` within the allowance. Controls at `12:04Z` finalize the fixture minute. It compares the two final rows with the separate fixture oracle, checks window boundaries/group metadata and exclusion of control-only windows, then injects an older distinct inspection and verifies that closed results stay unchanged. It records whether that inspection survived Q2; it does not assume all beyond-watermark arrivals are dropped under every batching arrangement.
+
+## Read quality results through HTTP
+
+The new [FastAPI service](docs/dashboard-api.md) reads the same serving database and exposes filtered station/window/rule snapshots at `localhost:8000`. It does not start the streaming jobs. The Streamlit view below remains available during migration.
 
 ## View stored quality results
 
