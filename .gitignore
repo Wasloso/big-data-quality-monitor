@@ -361,3 +361,6 @@ http-client.private.env.json
 
 # Kubernetes Plugin
 .idea/kubernetes/configs/kubeconfig_*
+
+# Local React dashboard build
+dashboard/node_modules/

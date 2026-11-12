@@ -15,3 +15,11 @@
 
 !Dockerfile.api
 !requirements-api.txt
+!dashboard/
+!dashboard/package.json
+!dashboard/package-lock.json
+!dashboard/index.html
+!dashboard/vite.config.js
+!dashboard/src/
+!dashboard/src/*.jsx
+!dashboard/src/*.css

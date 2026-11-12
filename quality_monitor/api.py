@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
 
 
 app = FastAPI(title="Quality monitor API")
@@ -102,3 +103,9 @@ def overview(
         "updated_at": max((row["updated_at"] for row in windows), default=None),
         "stations": list(stations.values()), "windows": windows, "alerts": alerts,
     }
+
+
+# Register API routes first; the built client uses hash links so refresh needs no router fallback.
+frontend = Path(__file__).resolve().parent.parent / "dashboard" / "dist"
+if frontend.is_dir():
+    app.mount("/", StaticFiles(directory=frontend, html=True), name="dashboard")

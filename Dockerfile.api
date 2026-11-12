@@ -1,6 +1,15 @@
+FROM node:22.20.0-slim AS frontend
+WORKDIR /dashboard
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY dashboard/index.html dashboard/vite.config.js ./
+COPY dashboard/src ./src
+RUN npm run build
+
 FROM python:3.12.12-slim
 WORKDIR /app
 COPY requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt
 COPY quality_monitor ./quality_monitor
+COPY --from=frontend /dashboard/dist ./dashboard/dist
 ENTRYPOINT ["uvicorn", "quality_monitor.api:app", "--host", "0.0.0.0", "--port", "8000"]

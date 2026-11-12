@@ -1,0 +1,46 @@
+:root { font-family: Arial, sans-serif; color: #233044; background: #f3f5f7; font-size: 15px; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1250px; margin: auto; padding: 28px; }
+h1, h2, h3 { margin-top: 0; }
+h1 { margin-bottom: 8px; }
+h2 { margin-top: 26px; }
+p { line-height: 1.5; }
+a { color: #185ba5; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+header p { margin-top: 0; color: #586579; }
+button, input, select { font: inherit; border: 1px solid #c4cbd5; border-radius: 4px; padding: 9px; background: white; }
+button { cursor: pointer; }
+button:hover { background: #e5edf5; }
+nav { display: flex; gap: 24px; border-bottom: 1px solid #c4cbd5; margin: 18px 0; padding-bottom: 12px; }
+nav a { text-decoration: none; }
+nav a[aria-current] { font-weight: bold; text-decoration: underline; text-underline-offset: 6px; }
+section, details { background: white; border: 1px solid #d9dfe7; border-radius: 6px; padding: 20px; margin-bottom: 18px; }
+.filters { display: flex; gap: 16px; align-items: end; flex-wrap: wrap; }
+label { display: flex; flex-direction: column; gap: 6px; font-weight: bold; }
+label:first-child { flex: 1; min-width: 200px; }
+select { max-width: 100%; }
+.notice, .warning { padding: 12px 16px; border-left: 4px solid #4984bb; background: #eaf1f8; }
+.warning { border-color: #b46e08; background: #fff2d9; }
+.freshness, small { font-size: 13px; color: #586579; }
+.counts { display: flex; flex-wrap: wrap; gap: 22px; margin: 18px 0; }
+.counts div { display: flex; flex-direction: column; gap: 5px; }
+.counts strong { font-size: 26px; }
+.counts span { font-size: 13px; color: #586579; }
+.stations { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+.badge { display: inline-block; padding: 4px 8px; border-radius: 4px; background: #e9edf2; font-size: 13px; }
+.badge.active, .badge.stale { color: #862f1a; background: #fbe5df; }
+.badge.clear, .badge.resolved { color: #245c40; background: #e2f0e8; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+th, td { padding: 11px 8px; border-bottom: 1px solid #e4e8ee; white-space: nowrap; }
+th { color: #586579; }
+meter { width: 65px; }
+summary { cursor: pointer; font-weight: bold; }
+@media (max-width: 650px) {
+  main { padding: 16px; }
+  header { align-items: start; }
+  .filters { display: block; }
+  label { margin-bottom: 12px; }
+  .counts { gap: 16px; }
+}

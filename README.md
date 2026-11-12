@@ -6,7 +6,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 ## Current stage
 
-The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming validates these messages and archives them in Parquet, including invalid payloads with error reasons. Separate streaming jobs deduplicate valid records into clean Parquet and display provisional or finalized quality windows. Explicit progress controls close finite runs. A SQLite sink now persists window snapshots and threshold alert status, and a local MVTec manifest tool prepares reproducible splits. A read-only Streamlit dashboard now displays stored windows and alert evaluations. The C07 store unit checks pass; a clean-archive-to-SQLite writer run is also checked. Full pipeline crash-recovery verification and C09 execution on actual local data remain pending. The script in `scripts/check_spark.py` remains the original four-row batch smoke check.
+The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming validates these messages and archives them in Parquet, including invalid payloads with error reasons. Separate streaming jobs deduplicate valid records into clean Parquet and display provisional or finalized quality windows. Explicit progress controls close finite runs. A SQLite sink now persists window snapshots and threshold alert status, and a local MVTec manifest tool prepares reproducible splits. A read-only Streamlit dashboard now displays stored windows and alert evaluations. The C07 store unit checks pass; a clean-archive-to-SQLite writer run is also checked. Full pipeline crash-recovery verification and C09 execution on actual local data remain pending. The script in `scripts/check_spark.py` remains the original four-row batch smoke check. A FastAPI service and initial React station/summary/detail views now read the same serving data. They show window history and rule evaluations, with photos and machine context explicitly unavailable until the item projection is added. Continuous image inference is still pending.
 
 ## Roadmap
 
@@ -24,7 +24,8 @@ The local Spark setup, an [inspection event format](docs/event-schema.md), and a
 - [ ] Run MVTec AD images through PatchCore with a separately evaluated threshold.
 - [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.
 - [x] Add a bounded read-only FastAPI view of existing quality results (UI1).
-- [ ] Add the React station interface, continuous station processes and persisted simulated context.
+- [x] Add initial React station/summary/detail views over the quality API (UI2; item photos/context not connected).
+- [ ] Add continuous station processes, persisted simulated context and item/photo history.
 - [ ] Add real inspection-image previews and measure correctness, throughput, and delays.
 
 ## Publish inspections to Kafka
@@ -160,7 +161,7 @@ The scenario injects ten duplicates and two invalid payloads, holds back two rej
 
 ## Read quality results through HTTP
 
-The new [FastAPI service](docs/dashboard-api.md) reads the same serving database and exposes filtered station/window/rule snapshots at `localhost:8000`. It does not start the streaming jobs. The Streamlit view below remains available during migration.
+The new [React dashboard and FastAPI service](docs/dashboard-api.md) read the same serving database at `localhost:8000`, with station overview, summary/alerts and per-station window history. Run `docker compose up --build -d api` after the serving directory exists; this builds and serves React alongside bounded HTTP snapshots. It does not start the streaming jobs. The Streamlit view below remains available during migration.
 
 ## View stored quality results
 
@@ -240,3 +241,5 @@ The Spark image and Kafka connector are pinned to version 4.0.2. Model dependenc
 - [Spark bounded deduplication](https://spark.apache.org/docs/4.0.2/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.dropDuplicatesWithinWatermark.html)
 - [Spark 4.0.2 documentation](https://spark.apache.org/docs/4.0.2/)
 - [MVTec AD dataset](https://www.mvtec.com/research-teaching/datasets/mvtec-ad)
+
+On 12 November 2026, the eight fast checks (including the serving-state resume regression), two explicitly invoked API checks and Compose validation passed. The combined Python/React image built successfully with Python 3.12.12, Node 22.20.0, FastAPI 0.162.5, React 19.3.1 and Vite 8.3.8. A temporary browser walkthrough checked station/summary/detail navigation, 120/18 fixture totals, station filtering, UTC range selection, an actual five-second polling update, narrow layout, missing-data and HTTP error states, without committing browser test infrastructure. The running API read 120 inspections and 18 rejects from the retained serving volume and served its built assets. The Spark window writer also resumed the existing checkpoint/database and drained with `--once` successfully after the new guard. These are API/UI and normal-resume checks, not completed image inference, a full Kafka recovery scenario or throughput measurements.
