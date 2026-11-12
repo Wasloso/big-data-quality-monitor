@@ -27,6 +27,23 @@ def query_epoch(checkpoint, contract):
         metadata = json.loads(path.read_text(encoding="utf-8"))
         if metadata["contract"] != contract:
             raise ValueError("SQLite query settings changed; use a new checkpoint")
+    commits = path.parent / "commits"
+    committed = [int(item.name) for item in commits.iterdir() if item.name.isdigit()] if commits.is_dir() else []
+    if committed:
+        # A retained Spark commit must still have its matching durable sink transaction.
+        database = Path(contract["database"]).resolve()
+        try:
+            with closing(sqlite3.connect(database.as_uri() + "?mode=ro")) as connection:
+                for table in ("windows", "alerts"):
+                    connection.execute(f"SELECT 1 FROM {table} LIMIT 1")
+                applied = connection.execute(
+                    "SELECT 1 FROM processed_batches WHERE query_epoch=? AND batch_id=?",
+                    (metadata["epoch"], max(committed)),
+                ).fetchone()
+        except sqlite3.Error as error:
+            raise ValueError("Serving database is missing or incomplete; restore it with its checkpoint") from error
+        if not applied:
+            raise ValueError("Serving batch ledger does not match the checkpoint; restore matching runtime state")
     return metadata["epoch"]
 
 

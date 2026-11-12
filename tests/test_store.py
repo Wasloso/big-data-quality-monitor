@@ -5,10 +5,39 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
-from quality_monitor.store import write_batch
+from quality_monitor.store import query_epoch, write_batch
 
 
 class StoreTests(unittest.TestCase):
+    def test_resume_requires_the_database_and_committed_batch_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "quality.sqlite"
+            checkpoint = Path(directory) / "checkpoint"
+            contract = {"database": str(database)}
+            epoch = query_epoch(checkpoint, contract)
+            # A fresh query can restart before its first sink write.
+            self.assertEqual(query_epoch(checkpoint, contract), epoch)
+            self.assertFalse(database.exists())
+            write_batch(database, [], epoch, 0)
+            (checkpoint / "commits").mkdir()
+            (checkpoint / "commits" / "0").write_text("v1\n{}")
+            self.assertEqual(query_epoch(checkpoint, contract), epoch)
+            with self.assertRaisesRegex(ValueError, "settings changed"):
+                query_epoch(checkpoint, {**contract, "window": "30 seconds"})
+            with closing(sqlite3.connect(database)) as connection, connection:
+                connection.execute("DELETE FROM processed_batches")
+            with self.assertRaisesRegex(ValueError, "ledger does not match"):
+                query_epoch(checkpoint, contract)
+            write_batch(database, [], epoch, 0)
+            with closing(sqlite3.connect(database)) as connection, connection:
+                connection.execute("DROP TABLE alerts")
+            with self.assertRaisesRegex(ValueError, "missing or incomplete"):
+                query_epoch(checkpoint, contract)
+            database.unlink()
+            with self.assertRaisesRegex(ValueError, "missing or incomplete"):
+                query_epoch(checkpoint, contract)
+            self.assertFalse(database.exists())
+
     def test_retry_rule_boundary_and_provisional_resolution(self):
         with tempfile.TemporaryDirectory() as directory:
             database = str(Path(directory) / "quality.sqlite")
