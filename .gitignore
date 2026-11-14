@@ -364,3 +364,13 @@ http-client.private.env.json
 
 # Local React dashboard build
 dashboard/node_modules/
+
+# Optional model environment and pretrained cache
+.venv-vision/
+
+# Local datasets, fitted models and runtime serving files
+/data/
+/artifacts/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

@@ -139,7 +139,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, required=True, help="Directory containing bottle/train, bottle/test, etc.")
     parser.add_argument("--category", default="bottle")
-    parser.add_argument("--output", type=Path, default=Path("artifacts/manifests/bottle-v1"))
+    parser.add_argument("--output", type=Path, help="Defaults to artifacts/manifests/<category>-v1")
     parser.add_argument("--validation-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--check", type=Path, metavar="MANIFEST", help="Verify an existing manifest and local files")
@@ -156,7 +156,7 @@ def main():
             counts = validate_manifest(manifest, json.loads(label_path.read_text(encoding="utf-8")), args.data_root)
         else:
             manifest_id, counts = create_manifest(
-                args.data_root, args.category, args.output, args.validation_fraction, args.seed,
+                args.data_root, args.category, args.output or Path(f"artifacts/manifests/{args.category}-v1"), args.validation_fraction, args.seed,
             )
     except (OSError, ValueError, KeyError, TypeError) as error:
         parser.exit(1, f"Manifest error: {error}\n")

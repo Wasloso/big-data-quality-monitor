@@ -1,0 +1,31 @@
+{
+  "dataset": "MVTec AD",
+  "category": "bottle",
+  "source": "https://www.mvtec.com/company/research/datasets/mvtec-ad",
+  "license": "CC BY-NC-SA 4.0",
+  "attribution": "Bergmann, Fauser, Sattlegger and Steger, CVPR 2019; MVTec Software GmbH",
+  "data_origin": "Existing local bottle.tar.xz; category files reused read-only",
+  "archive_sha256": "726512129cb3b1f47d4f6cd7c7fc9170db7fc209132249c788fec06029cb5dc3",
+  "archive_files_verified": 357,
+  "manifest_id": "cab3745574ce78a6932500bb9707d7de2d4d35c88c2f870eaf7a9dc3d6f4ed26",
+  "policy": {
+    "evaluation": "entire unchanged official test set; labels kept separately",
+    "overlap": "reject matching SHA-256 image content across splits",
+    "ranking": "sha256(seed:relative_posix_path), ascending; floor with at least one image per split",
+    "seed": 42,
+    "threshold_tuning": "normal validation holdout only; never official test images or labels",
+    "training": "official train/good excluding normal validation holdout",
+    "validation_fraction": 0.2,
+    "version": "normal-holdout-v1"
+  },
+  "split_counts": {
+    "train": 168,
+    "validation": 41,
+    "test": 83
+  },
+  "test_labels": {
+    "anomaly": 63,
+    "normal": 20
+  },
+  "note": "Every archive file matches the local extraction. This does not certify completeness against an independent official inventory."
+}

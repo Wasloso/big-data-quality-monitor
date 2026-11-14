@@ -19,7 +19,7 @@ The local Spark setup, an [inspection event format](docs/event-schema.md), and a
 - [x] Finalize quality windows with progress records and verify delayed arrivals.
 - [x] Store raw inspection history in Parquet with persistent ingestion checkpoints.
 - [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; full pipeline/recovery verification pending).
-- [x] Implement reproducible local MVTec manifests and split integrity checking (C09; local dataset execution pending).
+- [x] Implement local MVTec manifests and verify bottle preparation/integrity (168 fit / 41 validation / 83 test; capsule preparation pending).
 - [ ] Add historical queries and reconciliation.
 - [ ] Run MVTec AD images through PatchCore with a separately evaluated threshold.
 - [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.

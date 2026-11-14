@@ -19,7 +19,7 @@ python -m quality_monitor.data_manifest --data-root data/mvtec --category bottle
 python -m quality_monitor.data_manifest --data-root data/mvtec --check artifacts/manifests/bottle-v1/manifest.json
 ```
 
-The data root contains category directories, rather than pointing directly at `bottle`. The output contains `manifest.json` and a separate `labels.json`. Recreating an output directory replaces those two files; use a new versioned directory when changing input or policy. Paths inside the manifest are relative to the data root, so the dataset can be relocated. It records every image's size and SHA-256, source attribution, category, split policy, seed, requested validation fraction, and the evaluation-label file hash. The deterministic manifest ID changes when the inventory or policy changes. Actual split sizes are printed; record the ID in later training/evaluation artifacts.
+The data root contains category directories, rather than pointing directly at `bottle`. Omitting `--output` now chooses `artifacts/manifests/<category>-v1`, so a capsule command cannot silently use the bottle directory by default. The output contains `manifest.json` and a separate `labels.json`. Recreating an output directory replaces those two files; use a new versioned directory when changing input or policy. Paths inside the manifest are relative to the data root, so the dataset can be relocated. It records every image's size and SHA-256, source attribution, category, split policy, seed, requested validation fraction, and the evaluation-label file hash. The deterministic manifest ID changes when the inventory or policy changes. Actual split sizes are printed; record the ID in later training/evaluation artifacts.
 
 The exact split policy is `normal-holdout-v1`:
 
@@ -31,3 +31,11 @@ The exact split policy is `normal-holdout-v1`:
 The checker verifies complete coverage of the **local** PNG train/test inventory and its ground-truth masks. It cannot certify that a download contains every image distributed by MVTec without an independent reference inventory, nor does it decode images. Preserve the download/archive provenance alongside local experiment artifacts. Image decode failures belong to subsequent model preparation and must be reported explicitly.
 
 `data/` and `artifacts/` are ignored, as are generated SQLite serving files. Keep images, masks, fitted weights, and large manifests outside commits. Only deliberately chosen small reproducibility summaries belong in Git. This step provides manifest creation and integrity checking; no actual dataset manifest or model evaluation result is claimed until run on local data.
+
+## Verified bottle preparation — 14 November 2026
+
+The existing local MVTec AD bottle archive from the team's other anomaly-detection checkout was reused read-only; no source images or that project's splits were changed. This project's independent `normal-holdout-v1` manifest creation/check passed: 168 normal fit images, 41 normal validation images and all 83 official test images (20 normal, 63 anomalous). All 357 archived files matched the local extraction by SHA-256, including supplied provenance/license material. This verifies consistency with that archive, not an independently certified complete official release.
+
+The small [preparation record](results/bottle-data-preparation.json) records the archive hash, exact manifest identity, counts and policy. Images, masks and full manifests remain under ignored local paths. Original data attribution: Paul Bergmann, Michael Fauser, David Sattlegger and Carsten Steger, CVPR 2019, MVTec Software GmbH; supplied license CC BY-NC-SA 4.0. Capsule preparation remains pending.
+
+This is evidence for bottle data preparation only, not model accuracy or live station inference. The model step must freeze a normal-validation threshold policy before running held-out test evaluation.
