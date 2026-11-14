@@ -107,6 +107,22 @@ services:
       - spark.ui.enabled=false
       - /app/quality_monitor/windows.py
 
+  spark-inspections:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    volumes:
+      - archive-data:/data
+    environment:
+      SPARK_LOCAL_IP: 127.0.0.1
+    entrypoint:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - local[2]
+      - --conf
+      - spark.ui.enabled=false
+      - /app/quality_monitor/project_inspections.py
+
   dashboard:
     build:
       context: .

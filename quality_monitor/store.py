@@ -14,7 +14,7 @@ def identity(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def query_epoch(checkpoint, contract):
+def query_epoch(checkpoint, contract, *, tables=("windows", "alerts")):
     path = Path(checkpoint) / "quality-store.json"
     if not path.exists() and any((path.parent / name).exists() for name in ("metadata", "offsets", "commits")):
         raise ValueError("Existing Spark checkpoint has no SQLite epoch; use a new checkpoint")
@@ -34,7 +34,7 @@ def query_epoch(checkpoint, contract):
         database = Path(contract["database"]).resolve()
         try:
             with closing(sqlite3.connect(database.as_uri() + "?mode=ro")) as connection:
-                for table in ("windows", "alerts"):
+                for table in tables:
                     connection.execute(f"SELECT 1 FROM {table} LIMIT 1")
                 applied = connection.execute(
                     "SELECT 1 FROM processed_batches WHERE query_epoch=? AND batch_id=?",
