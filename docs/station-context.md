@@ -8,7 +8,7 @@ The initial simulator always reports `running` when it acquires an inspection. T
 .venv-vision/bin/python -m quality_monitor.station --station A --category bottle --run-id context-demo --rate 1 --data-root "$MVTEC_ROOT" --images artifacts/bottle-images.json --model artifacts/models/bottle-v1 --work-order WO-A --operation visual-inspection --temperature-c 30 --conveyor-speed-m-min 8
 ```
 
-Use a different work order/nominal values for B. Explicit `idle` and `maintenance` values are recognized by the context validator, but this first station simulator emits only acquisition-time `running`. It does not publish idle/stop transitions or independent telemetry. Ctrl+C stops acquisition; its existing local producer-status artifact records shutdown separately. Producer-status API/UI remains pending.
+Use a different work order/nominal values for B. Explicit `idle` and `maintenance` values are recognized by the context validator, but this first station simulator emits only acquisition-time `running`. It does not publish idle/stop transitions or independent telemetry. Ctrl+C stops acquisition; its existing local producer-status artifact records shutdown separately. The optional [producer-status API/UI](producer-status.md) now exposes those separate session reports.
 
 ## Runtime version transition
 

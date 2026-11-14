@@ -63,5 +63,19 @@
     "Both processes used the bottle artifact; repeated source images do not add independent evaluation samples.",
     "No Spark processor interruption, capacity or latency measurement was performed.",
     "The bad image was created in this run's ignored data copy; the original dataset was unchanged."
-  ]
+  ],
+  "browser_check": {
+    "run_id": "producer-status-4d98c6ac82",
+    "checks": [
+      "producer-only run discovery",
+      "live acknowledgement update",
+      "real inference error",
+      "reported stopped session",
+      "390px layout",
+      "status-source failure/recovery",
+      "stale active report stays unknown"
+    ],
+    "page_errors": [],
+    "fault_injection": "Unavailable/stale UI cases use HTTP response injection; running/error/counter updates are real processes."
+  }
 }

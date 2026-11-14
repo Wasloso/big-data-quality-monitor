@@ -63,3 +63,8 @@ Configure the [optional local image mount](inspection-images.md) to show photos.
 ## Persisted simulated observations
 
 Retained items and latest observations now include nullable `station_context`. Overview station rows include `latest_observation`, with separate top-level `observation_state` and `observation_batch_at`. The observation source is read independently of quality windows; its failure returns unavailable context without hiding valid quality totals. Latest observations are scoped to the run/detector and are not filtered to an old selected window range. Invalid stored context is an explicit unavailable state. See [context schema and runtime transition](station-context.md) for the versioned archive/checkpoint/database paths and simulator settings.
+
+
+## Producer sessions
+
+Enable the optional [producer-status source](producer-status.md) to show session state, callback acknowledgements, inference/delivery errors and numeric thresholds independently of Spark windows. `/api/runs` can discover these producer-only contexts before quality data exists. Session totals ignore historical window-time filters and are never presented as downstream processed counts.

@@ -1,6 +1,6 @@
 # Continuous image stations (C11, first increment)
 
-`quality_monitor.station` runs actual CPU inference on a repeating image list and publishes completed predictions to Kafka until Ctrl+C. Each process loads one fitted category artifact; stations share the code, not a memory bank across different categories. The bottle artifact is checked. Simulated machine context is now persisted; capsule and producer-status API/UI are separate follow-ups. Read [the v2 state transition](station-context.md) before resuming existing runtime data.
+`quality_monitor.station` runs actual CPU inference on a repeating image list and publishes completed predictions to Kafka until Ctrl+C. Each process loads one fitted category artifact; stations share the code, not a memory bank across different categories. The bottle artifact is checked. Simulated machine context is now persisted; capsule remains a follow-up. The optional [producer-status API/UI](producer-status.md) now exposes session reports independently of quality windows. Read [the v2 state transition](station-context.md) before resuming existing runtime data.
 
 ## Start locally
 
@@ -56,7 +56,7 @@ Each process prints the path of a new ignored `artifacts/stations/<station>-<ses
 | `enqueue_errors`, `delivery_errors`, `pending` | Failed enqueue, failed delivery callbacks and queued predictions without an observed final callback. |
 | `threshold`, versions, session/run IDs, timestamps, `last_error` | Provenance and the latest observed error; successful later attempts do not erase error counts. |
 
-Inference failures are logged and the next acquisition can continue. Delivery/enqueue failure stops the process; incomplete flush is a failure. A process can stop cleanly after earlier inference errors; error counts remain visible and its exit code is nonzero. Status is currently a local artifact, not served by FastAPI/React. It does not prove Spark processing or completeness.
+Inference failures are logged and the next acquisition can continue. Delivery/enqueue failure stops the process; incomplete flush is a failure. A process can stop cleanly after earlier inference errors; error counts remain visible and its exit code is nonzero. Status is a local artifact; enable the optional [read-only status mount/API/UI](producer-status.md) to inspect it in React. It does not prove Spark processing or completeness.
 
 ## Downstream processing
 
@@ -79,4 +79,4 @@ The first actual-broker check started two bottle processes at target rates 2/s a
 
 After the producers stopped, sequential available-now drains resumed the retained Q1/Q2/Q3/projection checkpoints. The API matched all 39 Kafka inspection IDs, scores and image references; aggregate counts were A=7/5 predicted rejects and B=32/22. All quality windows remained provisional. One actual source PNG was served over HTTP and its SHA256 matched the dataset file.
 
-This is integration evidence, not a throughput benchmark or capsule validation. See the small [station integration record](results/bottle-station-integration.json) for the downstream check outcome. Full continuously observed Kafka-to-browser timing, producer-status API/UI, actual A/bottle+B/capsule acceptance, controlled finalization, C12 reconciliation, C13 retained-state recovery and C14 capacity experiments remain open.
+This is integration evidence, not a throughput benchmark or capsule validation. See the small [station integration record](results/bottle-station-integration.json) for the downstream check outcome. Full continuously observed Kafka-to-browser timing, actual A/bottle+B/capsule acceptance, controlled finalization, C12 reconciliation, C13 retained-state recovery and C14 capacity experiments remain open.

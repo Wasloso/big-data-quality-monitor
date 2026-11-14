@@ -1,6 +1,6 @@
 # Producer-session status (UI4)
 
-The station's local JSON snapshots are now exposed through a read-only API. The independent React panel follows in the UI increment. This reports acquisition/inference/publication activity without waiting for Spark windows. It is not a second source of processed-quality counts or a physical-machine heartbeat.
+The station's local JSON snapshots are now exposed through a read-only API and independent React panel. This reports acquisition/inference/publication activity without waiting for Spark windows. It is not a second source of processed-quality counts or a physical-machine heartbeat.
 
 ## Enable local status
 
@@ -51,3 +51,6 @@ One focused opt-in API method covers session scope, latest-by-start selection, r
 
 
 The actual run recorded three sessions after A stopped/restarted while B intentionally encountered two unreadable-image attempts. All 22 successful delivery callbacks matched unique Kafka inspection IDs; B published only its two successful predictions. The run was discoverable before any quality windows existed. This is producer/Kafka status evidence, not downstream processed counts. The original image dataset was unchanged; a separate ignored copy contained the deliberate decode failure.
+
+
+The real-container browser walkthrough verified producer-only discovery, actual increasing acknowledgement counters, the real decode error and ended session, and a 390px layout with no page errors. Unavailable/stale display cases used HTTP response injection. Its first run exposed that manual Refresh cleared the previous snapshot; moving that reset to scope changes preserved the last response, marked it unknown on failure, and passed the same walkthrough with fresh sessions. The panel polls every five seconds independently of window/inspection queries. Browser artifacts remain temporary; no UI test framework is committed.

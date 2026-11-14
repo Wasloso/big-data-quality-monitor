@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getJson, utcFilter } from './api.js';
 import RecentInspections from './RecentInspections.jsx';
 import StationObservation from './StationObservation.jsx';
+import ProducerStatus from './ProducerStatus.jsx';
 
 const runKey = (run) => JSON.stringify([run.run_id, run.category, run.model_version, run.threshold_version]);
 const percent = (value) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
@@ -49,6 +50,7 @@ export default function App() {
   const [data, setData] = useState(null);
   const [source, setSource] = useState('');
   const [truncated, setTruncated] = useState(false);
+  const [statusDiscovery, setStatusDiscovery] = useState('disabled');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [from, setFrom] = useState('');
@@ -79,6 +81,7 @@ export default function App() {
         setRuns(listing.runs);
         setSource(listing.state);
         setTruncated(listing.truncated);
+        setStatusDiscovery(listing.producer_status_state);
         if (!listing.runs.length) {
           setData(null);
           setError('');
@@ -129,6 +132,7 @@ export default function App() {
       <label>To (UTC)<input type="datetime-local" step="1" value={to} onChange={(event) => setTo(event.target.value)} /></label>
     </section>
     {truncated && <p className="notice">Showing the 100 most recently updated run/detector combinations.</p>}
+    {['partial', 'unavailable'].includes(statusDiscovery) && <p className="warning">Producer run discovery is incomplete. Stored quality runs remain listed.</p>}
     {error && <p className="warning" role="alert">{error}. {data && 'Showing the last successful response.'}</p>}
     {loading && <p role="status">Loading results…</p>}
     {!loading && !error && !runs.length && <p className="notice">{source === 'missing' ? 'No serving database yet.' : 'No inspection results yet.'}</p>}
@@ -159,6 +163,7 @@ export default function App() {
         </section>)}</div>
       </>}
     </>}
+    {context && <ProducerStatus key={`${selected}|${stationId || 'all'}`} context={context} stationId={stationId} refresh={refresh} />}
     {stationId && context && <RecentInspections key={`${selected}|${stationId}|${from}|${to}`}
       context={context} stationId={stationId} from={from} to={to} refresh={refresh} />}
   </main>;
