@@ -39,3 +39,10 @@ The existing local MVTec AD bottle archive from the team's other anomaly-detecti
 The small [preparation record](results/bottle-data-preparation.json) records the archive hash, exact manifest identity, counts and policy. Images, masks and full manifests remain under ignored local paths. Original data attribution: Paul Bergmann, Michael Fauser, David Sattlegger and Carsten Steger, CVPR 2019, MVTec Software GmbH; supplied license CC BY-NC-SA 4.0. Capsule preparation remains pending.
 
 This is evidence for bottle data preparation only, not model accuracy or live station inference. The model step must freeze a normal-validation threshold policy before running held-out test evaluation.
+
+
+## Capsule preparation — 14 November 2026
+
+The public [MVTec per-category downloads page](https://www.mvtec.com/research-teaching/datasets/mvtec-ad/downloads) supplied the capsule archive. Safe extraction into ignored `data/mvtec_ad` verified all 462 regular files against the archive. The category manifest/integrity command passed: 176 fit normals, 43 validation normals and 132 unchanged official test images (23 normal / 109 anomalous). See [source, hashes and policy](results/capsule-data-preparation.json). Settings/threshold policy for the first CPU baseline remain the predeclared bottle configuration; test labels are not tuning input.
+
+The combined root now contains an independently extracted, verified copy of the existing bottle archive and capsule. The original bottle manifest ID/content checks pass unchanged there, so the fitted bottle artifact can use it without retraining. The other checkout's data/environment were not modified. This common root supports one confined read-only API image mount for both categories. Images, archives and generated manifests remain ignored.

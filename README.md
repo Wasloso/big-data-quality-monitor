@@ -23,7 +23,7 @@ See [the context and runtime transition guide](docs/station-context.md) before u
 - [x] Finalize quality windows with progress records and verify delayed arrivals.
 - [x] Store raw inspection history in Parquet with persistent ingestion checkpoints.
 - [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; full pipeline/recovery verification pending).
-- [x] Implement local MVTec manifests and verify bottle preparation/integrity (168 fit / 41 validation / 83 test; capsule preparation pending).
+- [x] Implement local MVTec manifests and verify bottle preparation/integrity (bottle: 168/41/83; capsule: 176/43/132 fit/validation/test, both integrity-checked).
 - [x] Add bounded historical Spark queries and reconcile closed fixture windows with SQLite and an independent oracle (C12).
 - [x] Fit and evaluate the first CPU PatchCore bottle artifact using a normal-validation threshold (capsule pending).
 - [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.

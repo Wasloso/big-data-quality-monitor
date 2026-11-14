@@ -1,0 +1,36 @@
+{
+  "recorded_date": "2026-11-14",
+  "dataset": "MVTec AD",
+  "category": "capsule",
+  "source": "https://www.mvtec.com/research-teaching/datasets/mvtec-ad/downloads",
+  "download_url": "https://www.mydrive.ch/shares/163642/236d4304eaf9526b350b18807789ce86/download/420937454-1629958872/capsule.tar.xz",
+  "license": "CC BY-NC-SA 4.0",
+  "attribution": "Bergmann, Fauser, Sattlegger and Steger, CVPR 2019; MVTec Software GmbH",
+  "archive_sha256": "f6a41cb11f1589d552888fe9c43a1adcbcae15b70073e19093322f836d00a2b6",
+  "archive_bytes": 404252480,
+  "archive_files_verified": 462,
+  "local_root": "data/mvtec_ad",
+  "manifest_id": "b6c9f6c2b9705804ae90a5dad74eb5eb20490458ba27ef473309dbc1e9ca1305",
+  "policy": {
+    "evaluation": "entire unchanged official test set; labels kept separately",
+    "overlap": "reject matching SHA-256 image content across splits",
+    "ranking": "sha256(seed:relative_posix_path), ascending; floor with at least one image per split",
+    "seed": 42,
+    "threshold_tuning": "normal validation holdout only; never official test images or labels",
+    "training": "official train/good excluding normal validation holdout",
+    "validation_fraction": 0.2,
+    "version": "normal-holdout-v1"
+  },
+  "split_counts": {
+    "train": 176,
+    "validation": 43,
+    "test": 132
+  },
+  "test_labels": {
+    "normal": 23,
+    "anomaly": 109
+  },
+  "combined_root_bottle_manifest": "cab3745574ce78a6932500bb9707d7de2d4d35c88c2f870eaf7a9dc3d6f4ed26",
+  "note": "Archive extraction and all listed content hashes checked; this is not verification against an independently published category checksum. Original bottle checkout/data were unchanged.",
+  "declared_model_policy": "Reuse the existing bottle CPU settings and normal-only q95 higher/strict > policy; freeze before separate capsule test scoring."
+}
