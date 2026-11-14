@@ -1,0 +1,86 @@
+{
+  "recorded_date": "2026-11-14",
+  "run_id": "overview-e48c21dd9e",
+  "kafka_received": 115,
+  "unique_inspections": 115,
+  "stations": {
+    "A": {
+      "category": "bottle",
+      "inspections": 45,
+      "predicted_rejects": 22,
+      "ids_scores_context_match_kafka": true,
+      "source_photo_hashes_match": true
+    },
+    "B": {
+      "category": "capsule",
+      "inspections": 70,
+      "predicted_rejects": 0,
+      "ids_scores_context_match_kafka": true,
+      "source_photo_hashes_match": true
+    }
+  },
+  "producer_sessions": 3,
+  "all_session_errors_and_pending_zero": true,
+  "phases": [
+    {
+      "phase": "both-started",
+      "wall_time": 1794682957.6378505,
+      "run_id": "overview-e48c21dd9e"
+    },
+    {
+      "phase": "live-served",
+      "wall_time": 1794682983.838655,
+      "counts": {
+        "A": 11,
+        "B": 10
+      }
+    },
+    {
+      "phase": "station-stopped",
+      "wall_time": 1794682985.7552395,
+      "station": "A",
+      "published": 38
+    },
+    {
+      "phase": "B-continued",
+      "wall_time": 1794682988.218052,
+      "before": 41,
+      "after": 46,
+      "counts": {
+        "A": 21,
+        "B": 21
+      }
+    },
+    {
+      "phase": "station-stopped",
+      "wall_time": 1794682999.9042146,
+      "station": "A",
+      "published": 7
+    },
+    {
+      "phase": "station-stopped",
+      "wall_time": 1794683001.8185365,
+      "station": "B",
+      "published": 70
+    }
+  ],
+  "active_rule_results": 1,
+  "all_windows_provisional": true,
+  "scope": "Four continuously running retained-state Spark stages; low-rate real CPU inference, independent station stop/restart and exact final Kafka/serving reconciliation. Not processor-interruption recovery, final-window reconciliation, capacity or measured end-to-end latency.",
+  "capsule_limit": "The frozen first baseline misses the selected crack image; repeated source images do not add independent accuracy samples.",
+  "browser_check": {
+    "run_id": "overview-e48c21dd9e",
+    "checked": [
+      "mixed-category station cards",
+      "polling counts increased while stations ran (first attempt)",
+      "capsule detail and source photo",
+      "capsule deep-link reload",
+      "run summary",
+      "rule link exact window photo scope",
+      "390px layout",
+      "weighted global totals 115 / 22 / 19.1%",
+      "409 overview warning with explicit producer link navigation (HTTP fault injection)"
+    ],
+    "page_errors": []
+  }
+}

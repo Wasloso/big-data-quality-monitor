@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { getJson, utcFilter } from './api.js';
+import { getJson, utcFilter, stationHref } from './api.js';
 import RecentInspections from './RecentInspections.jsx';
 import StationObservation from './StationObservation.jsx';
 import ProducerStatus from './ProducerStatus.jsx';
 
-const runKey = (run) => JSON.stringify([run.run_id, run.category, run.model_version, run.threshold_version]);
 const percent = (value) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
 const utc = (value) => value ? new Date(value).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : 'Unavailable';
 const stale = (value) => !value || Date.now() - Date.parse(value) > 300_000;
@@ -31,13 +30,13 @@ function Windows({ rows }) {
   </table></div>;
 }
 
-function Rules({ rows, windows }) {
+function Rules({ rows, windows, runId }) {
   const byKey = Object.fromEntries(windows.map((row) => [row.window_key, row]));
   if (!rows.length) return <p>No matching rule results.</p>;
   return <div className="table-scroll"><table>
     <thead><tr><th>Station</th><th>Window start</th><th>Status</th><th>Rate threshold</th><th>Minimum count</th><th>State</th></tr></thead>
     <tbody>{rows.map((row) => <tr key={row.alert_id}>
-      <td><a href={`#station=${encodeURIComponent(byKey[row.window_key].line_id)}`}>{byKey[row.window_key].line_id}</a></td>
+      <td><a href={stationHref(byKey[row.window_key], runId, byKey[row.window_key])}>{byKey[row.window_key].line_id}</a></td>
       <td>{utc(byKey[row.window_key].window_start)}</td><td><span className={`badge ${row.status}`}>{row.status.replace('_', ' ')}</span></td>
       <td>&gt; {percent(row.threshold)}</td><td>{row.minimum_inspections}</td><td>{row.is_provisional ? 'Provisional' : 'Final'}</td>
     </tr>)}</tbody>
@@ -46,7 +45,7 @@ function Rules({ rows, windows }) {
 
 export default function App() {
   const [runs, setRuns] = useState([]);
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('run_id') || '');
   const [data, setData] = useState(null);
   const [source, setSource] = useState('');
   const [truncated, setTruncated] = useState(false);
@@ -60,7 +59,29 @@ export default function App() {
   const route = new URLSearchParams(hash.slice(1));
   const stationId = route.get('station');
   const summary = route.get('view') === 'summary';
-  const context = runs.find((run) => runKey(run) === selected);
+  const routeRun = route.get('run_id');
+  const category = route.get('category');
+  const model = route.get('model_version');
+  const threshold = route.get('threshold_version');
+  const windowFrom = route.get('window_from');
+  const windowTo = route.get('window_to');
+  const hasDetector = category && model && threshold;
+  const stations = data?.stations || [];
+  const detector = hasDetector ? { category, model_version: model, threshold_version: threshold }
+    : stations.find((station) => station.line_id === stationId);
+  const context = selected ? { run_id: selected, ...(stationId && detector ? {
+    category: detector.category, model_version: detector.model_version, threshold_version: detector.threshold_version,
+  } : {}) } : null;
+  const runIds = [...new Set(runs.map((run) => run.run_id))];
+  const navigation = (view) => `#${new URLSearchParams({ view, run_id: selected })}`;
+
+  useEffect(() => {
+    if (routeRun) setSelected(routeRun);
+    if (windowFrom && windowTo && Number.isFinite(Date.parse(windowFrom)) && Number.isFinite(Date.parse(windowTo))) {
+      setFrom(new Date(windowFrom).toISOString().slice(0, 19));
+      setTo(new Date(windowTo).toISOString().slice(0, 19));
+    }
+  }, [routeRun, windowFrom, windowTo]);
 
   useEffect(() => {
     const navigate = () => setHash(window.location.hash);
@@ -87,13 +108,18 @@ export default function App() {
           setError('');
           return;
         }
-        const current = listing.runs.find((run) => runKey(run) === selected);
+        const current = listing.runs.find((run) => run.run_id === selected);
         if (!current) {
-          setSelected(runKey(listing.runs[0]));
+          if (!selected) setSelected(listing.runs[0].run_id);
+          else throw new Error('Selected run is unavailable in the bounded run listing');
           return;
         }
-        const params = new URLSearchParams({ run_id: current.run_id, category: current.category,
-          model_version: current.model_version, threshold_version: current.threshold_version });
+        const params = new URLSearchParams({ run_id: current.run_id });
+        if (stationId && hasDetector) {
+          params.set('category', category);
+          params.set('model_version', model);
+          params.set('threshold_version', threshold);
+        }
         if (stationId) params.set('line_id', stationId);
         if (from) params.set('from_time', utcFilter(from));
         if (to) params.set('to_time', utcFilter(to));
@@ -111,9 +137,8 @@ export default function App() {
     setLoading(true);
     poll();
     return () => { active = false; clearTimeout(timer); controller?.abort(); };
-  }, [selected, from, to, stationId, refresh]);
+  }, [selected, from, to, stationId, category, model, threshold, refresh]);
 
-  const stations = data?.stations || [];
   const windows = data?.windows || [];
   const alerts = data?.alerts || [];
   const activeAlerts = alerts.filter((row) => row.status === 'active');
@@ -121,12 +146,16 @@ export default function App() {
   return <main>
     <header><div><h1>Quality monitor</h1><p>Inspection results from simulated production stations</p></div>
       <button onClick={() => setRefresh((value) => value + 1)}>Refresh</button></header>
-    <nav><a href="#view=stations" aria-current={!stationId && !summary ? 'page' : undefined}>Stations</a>
-      <a href="#view=summary" aria-current={!stationId && summary ? 'page' : undefined}>Summary &amp; alerts</a></nav>
+    <nav><a href={navigation('stations')} aria-current={!stationId && !summary ? 'page' : undefined}>Stations</a>
+      <a href={navigation('summary')} aria-current={!stationId && summary ? 'page' : undefined}>Summary &amp; alerts</a></nav>
     <section className="filters">
-      <label>Run / detector<select value={selected} onChange={(event) => setSelected(event.target.value)} disabled={!runs.length}>
+      <label>Run<select value={selected} onChange={(event) => {
+        setSelected(event.target.value);
+        window.location.hash = new URLSearchParams({ view: 'stations', run_id: event.target.value }).toString();
+      }} disabled={!runs.length}>
         {!runs.length && <option value="">No runs available</option>}
-        {runs.map((run) => <option key={runKey(run)} value={runKey(run)}>{run.run_id} · {run.category} · {run.model_version} · {run.threshold_version}</option>)}
+        {selected && !runIds.includes(selected) && <option value={selected}>{selected} (unavailable)</option>}
+        {runIds.map((runId) => <option key={runId} value={runId}>{runId}</option>)}
       </select></label>
       <label>From (UTC)<input type="datetime-local" step="1" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
       <label>To (UTC)<input type="datetime-local" step="1" value={to} onChange={(event) => setTo(event.target.value)} /></label>
@@ -140,7 +169,7 @@ export default function App() {
     {data && <>
       <p className="freshness">Response: {utc(data.response_time)} · Last stored update: {utc(data.updated_at)} · Refresh every 5 seconds</p>
       {data.updated_at && stale(data.updated_at) && <p className="warning">No recent stored results. The source may be idle or processing may have stopped.</p>}
-      {context?.model_version.startsWith('fixture') && <p className="notice">Fixture mode: predictions and image references are synthetic.</p>}
+      {stations.some((station) => station.model_version.startsWith('fixture')) && <p className="notice">Fixture mode: predictions and image references are synthetic.</p>}
       {data.observation_state === 'unavailable' && <p className="warning">Station observations are unavailable. Quality-window results remain available.</p>}
       <p>Counts cover selected stored windows. Provisional results can change; predicted accepts are not confirmed product passes.</p>
       {!stations.length ? <p className="notice">No stored windows match this station or time range.</p> : stationId ? <>
@@ -148,23 +177,24 @@ export default function App() {
         <section><h3>Latest station context</h3><p>Model: {context?.model_version} · Category: {context?.category} · Threshold version: {context?.threshold_version}</p>
           <StationObservation item={stations[0]?.latest_observation} /></section>
         <section><h3>Window history</h3><Windows rows={windows} /></section>
-        <section><h3>Rule evaluations</h3><Rules rows={alerts} windows={windows} /></section>
+        <section><h3>Rule evaluations</h3><Rules rows={alerts} windows={windows} runId={selected} /></section>
       </> : summary ? <>
         <h2>All-stations summary</h2><Counts stations={stations} />
-        <section><h3>Active quality alerts ({activeAlerts.length})</h3><Rules rows={activeAlerts} windows={windows} /></section>
+        <section><h3>Active quality alerts ({activeAlerts.length})</h3><Rules rows={activeAlerts} windows={windows} runId={selected} /></section>
         <section><h3>Window history</h3><Windows rows={windows} /></section>
-        <details><summary>All rule evaluations ({alerts.length})</summary><Rules rows={alerts} windows={windows} /></details>
+        <details><summary>All rule evaluations ({alerts.length})</summary><Rules rows={alerts} windows={windows} runId={selected} /></details>
       </> : <>
         <h2>Stations</h2><div className="stations">{stations.map((station) => <section key={station.line_id}>
-          <h3><a href={`#station=${encodeURIComponent(station.line_id)}`}>Station {station.line_id}</a></h3>
+          <h3><a href={stationHref(station, selected)}>Station {station.line_id}</a></h3>
           <p><span className={`badge ${stale(station.updated_at) ? 'stale' : 'clear'}`}>{stale(station.updated_at) ? 'Stale results' : 'Recent results'}</span></p>
-          <Counts stations={[station]} /><p>Model: {context?.model_version}</p>
+          <Counts stations={[station]} /><p>Category: {station.category} · Model: {station.model_version} · Threshold: {station.threshold_version}</p>
           <StationObservation item={station.latest_observation} /><small>Last stored update: {utc(station.updated_at)}</small>
         </section>)}</div>
       </>}
     </>}
     {context && <ProducerStatus key={`${selected}|${stationId || 'all'}`} context={context} stationId={stationId} refresh={refresh} />}
-    {stationId && context && <RecentInspections key={`${selected}|${stationId}|${from}|${to}`}
+    {stationId && windowFrom && windowTo && <p className="notice">Rule links select the window’s retained photo examples. These are not evidence of what caused the alert.</p>}
+    {stationId && context?.category && <RecentInspections key={`${selected}|${stationId}|${context.category}|${context.model_version}|${context.threshold_version}|${from}|${to}`}
       context={context} stationId={stationId} from={from} to={to} refresh={refresh} />}
   </main>;
 }

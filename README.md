@@ -8,7 +8,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 Kafka, Spark validation/deduplication/windowing, Parquet history and SQLite serving views are implemented. FastAPI and React show quality windows, alerts and bounded recent inspections with an optional local image mount. The finite synthetic fixture remains a separate correctness/replay mode.
 
-Original MVTec bottle and capsule data are prepared, with separately fitted CPU PatchCore artifacts and frozen normal-validation thresholds. The first capsule baseline has limited recall; see the recorded model results. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Simulated work-order/operation/temperature/speed context now persists through the pipeline and serving API. Producer-session state/counters now have a bounded read-only API and independent React panel, with producer-only run discovery. Mixed-category global-summary/live-demo acceptance and full recovery/capacity experiments remain incomplete. Historical Spark reconciliation is checked against finalized SQLite windows and an independent fixture oracle.
+Original MVTec bottle and capsule data are prepared, with separately fitted CPU PatchCore artifacts and frozen normal-validation thresholds. The first capsule baseline has limited recall; see the recorded model results. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Simulated work-order/operation/temperature/speed context now persists through the pipeline and serving API. Producer-session state/counters now have a bounded read-only API and independent React panel, with producer-only run discovery. Mixed-category global summaries and a live two-station walkthrough now pass; full processor recovery/capacity experiments remain incomplete. Historical Spark reconciliation is checked against finalized SQLite windows and an independent fixture oracle.
 
 See [the context and runtime transition guide](docs/station-context.md) before using the new v2 archive/checkpoint/serving paths; previous runtime state is retained.
 
@@ -34,8 +34,8 @@ See [the context and runtime transition guide](docs/station-context.md) before u
 - [x] Add continuous station processes with real bottle inference, independent stop/restart and local producer status.
 - [x] Persist versioned simulated machine context through Kafka/Spark/SQLite/API and display it with observation age in React.
 - [x] Show bounded producer-session reports, acknowledgements and errors independently of processed windows.
-- [ ] Complete mixed-category dashboard/live-demo acceptance using the two fitted artifacts.
-- [ ] Complete the mixed-category image demo and measure full recovery, throughput and visibility delays.
+- [x] Check mixed-category dashboard/live flow using both fitted artifacts (115 unique real predictions; independent stop/restart).
+- [ ] Measure full processor recovery, throughput and visibility delays, then rehearse the clean-checkout handoff.
 
 ## Publish inspections to Kafka
 
@@ -232,7 +232,7 @@ No additional Python dependencies are needed for unit tests. They cover sample t
 
 ## Two-category setup
 
-See [the bottle/capsule guide](docs/two-category-demo.md) for the shared local image root, separate model/list commands, checked per-category serving path and current combined-summary limitation.
+See [the bottle/capsule guide](docs/two-category-demo.md) for the shared local image root, separate model/list commands, continuous four-stage startup, combined run summary, detector-aware station/photo links and the checked live trace.
 
 ## Producer status
 
@@ -243,9 +243,8 @@ See [the producer-status guide](docs/producer-status.md) for the optional read-o
 The first real bottle model is fitted and evaluated. See [the CPU baseline guide](docs/vision-baseline.md) for the isolated optional environment, manifest/fit/evaluation commands, measured result and limitations. Weights and image predictions remain ignored local artifacts; real bottle station publication is available through [the continuous CLI](docs/continuous-stations.md).
 
 ## Next steps
-- Complete mixed-category global summaries and the continuously observed two-station walkthrough; both category artifacts are now evaluated.
 - Finish the required retained-state recovery and load/capacity checks.
-- Finish the mixed-category live demo and measure full-pipeline recovery, throughput and visibility delays; initial historical reconciliation is checked.
+- Rehearse a clean-checkout demo and report the measured limits; initial historical reconciliation and the low-rate mixed-category live walkthrough are checked.
 
 Checked on 6 November 2026 using Docker Engine 29.2.1 on WSL2 (Linux x86-64). The container reported Spark 4.0.2, Python 3.10.12, and Java 17.0.17.
 

@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { getJson } from './api.js';
+import { getJson, stationHref } from './api.js';
 
 const utc = (value) => new Date(value).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 
 export default function ProducerStatus({ context, stationId, refresh }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  const params = new URLSearchParams({ run_id: context.run_id, category: context.category,
-    model_version: context.model_version, threshold_version: context.threshold_version });
+  const params = new URLSearchParams({ run_id: context.run_id });
+  if (context.category) {
+    params.set('category', context.category);
+    params.set('model_version', context.model_version);
+    params.set('threshold_version', context.threshold_version);
+  }
   if (stationId) params.set('line_id', stationId);
   const query = params.toString();
 
@@ -36,7 +40,7 @@ export default function ProducerStatus({ context, stationId, refresh }) {
 
   return <section className="producer-status">
     <h3>Producer sessions</h3>
-    <p>Session counters cover this run and detector, independently of window time filters. Kafka acknowledgements are not Spark processed counts.</p>
+    <p>Session counters cover this run and any selected detector, independently of window time filters. Kafka acknowledgements are not Spark processed counts.</p>
     {error && <p className="warning" role="alert">{error}. {data && 'Showing the last successful status response.'}</p>}
     {!data && !error && <p>Loading producer reports…</p>}
     {data?.state === 'disabled' && <p>Producer status is not connected.</p>}
@@ -50,13 +54,14 @@ export default function ProducerStatus({ context, stationId, refresh }) {
           const unknown = error || ['stale', 'clock_skew'].includes(session.freshness);
           const hasErrors = session.inference_errors + session.enqueue_errors + session.delivery_errors > 0 || session.pending > 0;
           return <tr key={session.session_id}>
-            <td><strong>{session.station}</strong> · {session.session_id.slice(0, 8)}
+            <td><a href={stationHref(session, context.run_id)}><strong>{session.station}</strong></a> · {session.session_id.slice(0, 8)}
               <p>{session.latest_started_session ? 'Latest started session in this run' : 'Earlier session in this run'}</p>
               <small>Started {utc(session.started_at)}</small></td>
             <td><span className={`badge ${unknown || hasErrors || session.state === 'failed' ? 'stale' : 'clear'}`}>
               {unknown ? 'Unknown — stale or unavailable report' : `Reported ${session.state}`}</span>
               <p>Recorded: {session.state} at {utc(session.updated_at)}</p>
               {session.freshness === 'ended' && <p>Ended session; this does not describe another process.</p>}
+              <p>Category: {session.category} · Model: {session.model_version} · Threshold version: {session.threshold_version}</p>
               <p>Detector decision: score &gt; {session.threshold.toFixed(4)}</p>
               {session.last_error && <details><summary>Last reported error</summary><p>{session.last_error}</p></details>}</td>
             <td>{session.attempted} / {session.completed} / {session.queued}</td><td>{session.published}</td>
