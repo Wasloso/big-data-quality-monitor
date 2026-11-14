@@ -1,6 +1,6 @@
 # Continuous image stations (C11, first increment)
 
-`quality_monitor.station` runs actual CPU inference on a repeating image list and publishes completed predictions to Kafka until Ctrl+C. Each process loads one fitted category artifact; stations share the code, not a memory bank across different categories. The bottle artifact is checked. Simulated machine context is now persisted; capsule remains a follow-up. The optional [producer-status API/UI](producer-status.md) now exposes session reports independently of quality windows. Read [the v2 state transition](station-context.md) before resuming existing runtime data.
+`quality_monitor.station` runs actual CPU inference on a repeating image list and publishes completed predictions to Kafka until Ctrl+C. Each process loads one fitted category artifact; stations share the code, not a memory bank across different categories. Separate bottle/capsule artifacts are now fitted and evaluated; the first capsule baseline has limited recall. Simulated machine context is persisted. The optional [producer-status API/UI](producer-status.md) now exposes session reports independently of quality windows. Read [the v2 state transition](station-context.md) before resuming existing runtime data.
 
 ## Start locally
 
@@ -35,7 +35,7 @@ MVTEC_ROOT=/absolute/path/to/mvtec_ad
 .venv-vision/bin/python -m quality_monitor.station --station A --category bottle --run-id images-01 --rate 1 --data-root "$MVTEC_ROOT" --images artifacts/bottle-images.json --model artifacts/models/bottle-v1
 ```
 
-A second terminal can run B with `--station B --rate 2` and the same arguments for an initial bottle-only integration check. For the final A/bottle and B/capsule demo, prepare/evaluate capsule separately and supply its list and artifact; a category mismatch fails before publication. `--scenario` labels the run scenario. `--max-items 5` bounds acquisition attempts for an explicit smoke; without it, the sequence repeats until a stop signal. Do not interpret looping images as new independent evaluation samples.
+A second terminal can run B with `--station B --rate 2` and the same arguments for an initial bottle-only integration check. For A/bottle and B/capsule, use the [checked two-category setup](two-category-demo.md) and each category's separate list/artifact; a category mismatch fails before publication. `--scenario` labels the run scenario. `--max-items 5` bounds acquisition attempts for an explicit smoke; without it, the sequence repeats until a stop signal. Do not interpret looping images as new independent evaluation samples.
 
 Ctrl+C (or SIGTERM) stops new acquisitions, allows the current inference to finish and attempts a delivery flush bounded to ten seconds. The command emits no progress/closure controls. Source images remain on disk; Kafka carries score, decision, source reference, actual UTC acquisition/publication times and model/threshold IDs. The score uses the artifact's frozen strict `>` threshold, never a label-derived decision. Raw scores can exceed one.
 
@@ -79,4 +79,4 @@ The first actual-broker check started two bottle processes at target rates 2/s a
 
 After the producers stopped, sequential available-now drains resumed the retained Q1/Q2/Q3/projection checkpoints. The API matched all 39 Kafka inspection IDs, scores and image references; aggregate counts were A=7/5 predicted rejects and B=32/22. All quality windows remained provisional. One actual source PNG was served over HTTP and its SHA256 matched the dataset file.
 
-This is integration evidence, not a throughput benchmark or capsule validation. See the small [station integration record](results/bottle-station-integration.json) for the downstream check outcome. Full continuously observed Kafka-to-browser timing, actual A/bottle+B/capsule acceptance, controlled finalization, C12 reconciliation, C13 retained-state recovery and C14 capacity experiments remain open.
+This is integration evidence, not a throughput benchmark or capsule validation. See the small [station integration record](results/bottle-station-integration.json) for the downstream check outcome. Both fitted category contexts now pass a separate post-drain API/browser check; the combined summary/full live walkthrough and controlled closure remain pending. C12 closed-fixture reconciliation is checked; C13 retained-state recovery and C14 capacity experiments remain open.

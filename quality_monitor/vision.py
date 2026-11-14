@@ -182,7 +182,8 @@ def export_maps(args):
     model, transform, metadata = load_model(args.model)
     paths = []
     for relative in args.image:
-        if Path(relative).is_absolute() or Path(relative).parts[0] != metadata["category"]:
+        parts = Path(relative).parts
+        if not parts or Path(relative).is_absolute() or ".." in parts or parts[0] != metadata["category"]:
             raise ValueError("Map image category differs from the fitted artifact")
         paths.append(checked_path(args.data_root, relative))
     args.output.mkdir(parents=True, exist_ok=False)

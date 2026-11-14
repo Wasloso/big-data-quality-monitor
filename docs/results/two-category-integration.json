@@ -1,0 +1,45 @@
+{
+  "run_id": "categories-5325464ae4",
+  "kafka_received": 7,
+  "station_categories": {
+    "A": "bottle",
+    "B": "capsule"
+  },
+  "api_checks": {
+    "A": {
+      "category": "bottle",
+      "model_version": "patchcore-bottle-188bbf43bf0a",
+      "threshold_version": "normal-quantile-acbbe02f2e47",
+      "inspections": 3,
+      "predicted_rejects": 1,
+      "matching_ids_scores_context": true,
+      "source_photo_hashes_match": true,
+      "wrong_detector_station_selection_empty": true
+    },
+    "B": {
+      "category": "capsule",
+      "model_version": "patchcore-capsule-72987cbf1cf3",
+      "threshold_version": "normal-quantile-f6e26830b796",
+      "inspections": 4,
+      "predicted_rejects": 0,
+      "matching_ids_scores_context": true,
+      "source_photo_hashes_match": true,
+      "wrong_detector_station_selection_empty": true
+    }
+  },
+  "scope": "Independent per-category API selections after staged retained-state drains; combined summary/live/recovery/capacity not checked.",
+  "recorded_date": "2026-11-14",
+  "browser_check": {
+    "run_id": "categories-5325464ae4",
+    "checked": [
+      "bottle A selection/photo/context/model",
+      "capsule B selection/photo/context/model",
+      "stopped producer reports",
+      "390px capsule layout"
+    ],
+    "page_errors": [],
+    "limitation": "Selected detector contexts checked separately; the current all-stations view is not a combined mixed-category summary."
+  },
+  "capsule_limit": "The fixed capsule crack sample is missed by this first baseline; predicted decisions were preserved without ground-truth overrides.",
+  "map_category_path_escape_refused": true
+}
