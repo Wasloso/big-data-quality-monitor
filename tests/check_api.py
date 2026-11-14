@@ -88,7 +88,7 @@ class ApiChecks(unittest.TestCase):
                 observed, state, batch_at = station_observations(base["run_id"], base["category"], base["model_version"], base["threshold_version"])
                 self.assertEqual(state, "ready")
                 self.assertIsNotNone(batch_at)
-                self.assertEqual(observed["A"]["station_context"], context)
+                self.assertEqual(observed[("A", base["category"], base["model_version"], base["threshold_version"])]["station_context"], context)
                 self.assertEqual(station_observations("other-selection", base["category"], base["model_version"], base["threshold_version"])[0], {})
                 self.assertIsNone(first["inspections"][1]["station_context"])
                 self.assertEqual(first["latest_inspection"]["inspection_id"], "item-3")
@@ -142,6 +142,7 @@ class ApiChecks(unittest.TestCase):
             params = {name: base[name] for name in ("run_id", "category", "model_version", "threshold_version")}
             with patch("quality_monitor.api.DATABASE", database), TestClient(app) as client:
                 self.assertEqual(client.get("/api/overview", params=params).status_code, 413)
+                self.assertEqual(client.get("/api/overview", params={"run_id": "run"}).status_code, 413)
                 self.assertEqual(client.get("/api/overview", params={**params, "line_id": "0"}).status_code, 200)
 
 
@@ -201,3 +202,36 @@ class ApiChecks(unittest.TestCase):
                     self.assertEqual(client.get("/api/producer-status", params=params).status_code, 413)
                 with patch("quality_monitor.api.STATUS_ROOT", None):
                     self.assertEqual(client.get("/api/producer-status", params=params).json()["state"], "disabled")
+
+    def test_run_overview_keeps_detectors_and_rejects_ambiguous_or_overlapping_counts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "quality.sqlite"
+            base = {"start": datetime(2026, 11, 7, 12), "end": datetime(2026, 11, 7, 12, 1),
+                    "run_id": "mixed", "line_id": "A", "category": "bottle", "model_version": "bottle-model",
+                    "threshold_version": "bottle-threshold", "inspections": 60, "rejects": 6}
+            capsule = {**base, "line_id": "B", "category": "capsule", "model_version": "capsule-model",
+                       "threshold_version": "capsule-threshold", "inspections": 20, "rejects": 4}
+            later = {**base, "start": datetime(2026, 11, 7, 12, 1), "end": datetime(2026, 11, 7, 12, 2),
+                     "inspections": 40, "rejects": 4}
+            write_batch(database, [base, capsule, later], "epoch", 0)
+            with patch("quality_monitor.api.DATABASE", database), TestClient(app) as client:
+                result = client.get("/api/overview", params={"run_id": "mixed"})
+                self.assertEqual(result.status_code, 200)
+                data = result.json()
+                self.assertEqual(data["scope"], "run")
+                self.assertEqual(sum(row["inspections"] for row in data["stations"]), 120)
+                self.assertEqual(sum(row["rejects"] for row in data["stations"]), 14)
+                self.assertEqual({r["line_id"]: r["category"] for r in data["stations"]}, {"A": "bottle", "B": "capsule"})
+                filtered = {"run_id": "mixed", "category": "capsule", "model_version": "capsule-model", "threshold_version": "capsule-threshold"}
+                self.assertEqual(client.get("/api/overview", params=filtered).json()["stations"][0]["inspections"], 20)
+                self.assertEqual(client.get("/api/overview", params={"run_id": "mixed", "category": "capsule"}).status_code, 422)
+                self.assertEqual(client.get("/api/producer-status", params={"run_id": "mixed", "category": "capsule"}).status_code, 422)
+                self.assertEqual(client.get("/api/overview", params={"run_id": "' OR 1=1 --"}).json()["stations"], [])
+                write_batch(database, [{**base, "model_version": "competing-model"}], "epoch", 1)
+                self.assertEqual(client.get("/api/overview", params={"run_id": "mixed"}).status_code, 409)
+                self.assertEqual(client.get("/api/overview", params=filtered).status_code, 200)
+                with closing(sqlite3.connect(database)) as connection, connection:
+                    connection.execute("DELETE FROM windows WHERE model_version='competing-model'")
+                overlap = {**base, "start": datetime(2026, 11, 7, 12, 0, 30), "end": datetime(2026, 11, 7, 12, 1, 30)}
+                write_batch(database, [overlap], "epoch", 2)
+                self.assertEqual(client.get("/api/overview", params={"run_id": "mixed"}).status_code, 409)

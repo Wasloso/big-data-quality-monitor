@@ -48,16 +48,23 @@ def status_snapshot(filters=None):
         raise HTTPException(503, "Producer-status storage is unavailable") from error
 
 
+def detector_filters(category, model_version, threshold_version):
+    values = {"category": category, "model_version": model_version, "threshold_version": threshold_version}
+    if any(value is not None for value in values.values()) and any(value is None for value in values.values()):
+        raise HTTPException(422, "Provide category, model_version and threshold_version together, or omit all three")
+    return {name: value for name, value in values.items() if value is not None}
+
+
 @app.get("/api/producer-status")
 def producer_status(
     run_id: str = Query(min_length=1, max_length=200),
-    category: str = Query(min_length=1, max_length=200),
-    model_version: str = Query(min_length=1, max_length=200),
-    threshold_version: str = Query(min_length=1, max_length=200),
+    category: str | None = Query(default=None, min_length=1, max_length=200),
+    model_version: str | None = Query(default=None, min_length=1, max_length=200),
+    threshold_version: str | None = Query(default=None, min_length=1, max_length=200),
     line_id: str | None = Query(default=None, min_length=1, max_length=200),
 ):
-    return status_snapshot({"run_id": run_id, "category": category, "model_version": model_version,
-                            "threshold_version": threshold_version, "station": line_id})
+    detector = detector_filters(category, model_version, threshold_version)
+    return status_snapshot({"run_id": run_id, **detector, "station": line_id})
 
 
 @app.get("/api/runs")
@@ -110,14 +117,16 @@ def station_observations(run_id, category, model_version, threshold_version):
         with snapshot(STATIONS_DATABASE) as connection:
             if connection is None:
                 return {}, "missing", None
-            rows = connection.execute("""
-                SELECT * FROM station_latest
-                WHERE run_id=? AND category=? AND model_version=? AND threshold_version=? LIMIT 501
-            """, (run_id, category, model_version, threshold_version)).fetchall()
+            detector = detector_filters(category, model_version, threshold_version)
+            where = ["run_id=?", *(f"{name}=?" for name in detector)]
+            rows = connection.execute(
+                "SELECT * FROM station_latest WHERE " + " AND ".join(where) + " LIMIT 501",
+                [run_id, *detector.values()],
+            ).fetchall()
             if len(rows) > 500:
                 raise HTTPException(413, "Over 500 station observations selected")
             batch = connection.execute("SELECT MAX(processed_at) FROM processed_batches").fetchone()[0]
-        observations = {row["line_id"]: {
+        observations = {tuple(row[name] for name in ("line_id", "category", "model_version", "threshold_version")): {
             "event_time": row["event_time"], "inspection_id": row["inspection_id"],
             "station_context": decoded_context(dict(row).get("station_context")),
         } for row in rows}
@@ -130,9 +139,9 @@ def station_observations(run_id, category, model_version, threshold_version):
 @app.get("/api/overview")
 def overview(
     run_id: str = Query(min_length=1, max_length=200),
-    category: str = Query(min_length=1, max_length=200),
-    model_version: str = Query(min_length=1, max_length=200),
-    threshold_version: str = Query(min_length=1, max_length=200),
+    category: str | None = Query(default=None, min_length=1, max_length=200),
+    model_version: str | None = Query(default=None, min_length=1, max_length=200),
+    threshold_version: str | None = Query(default=None, min_length=1, max_length=200),
     line_id: str | None = Query(default=None, min_length=1, max_length=200),
     from_time: datetime | None = None,
     to_time: datetime | None = None,
@@ -140,8 +149,9 @@ def overview(
     start, end = utc_bound(from_time), utc_bound(to_time)
     if from_time is not None and to_time is not None and from_time >= to_time:
         raise HTTPException(422, "Time range must have a start before its end")
-    where = ["run_id=?", "category=?", "model_version=?", "threshold_version=?"]
-    values = [run_id, category, model_version, threshold_version]
+    detector = detector_filters(category, model_version, threshold_version)
+    where = ["run_id=?", *(f"{name}=?" for name in detector)]
+    values = [run_id, *detector.values()]
     for clause, value in (("line_id=?", line_id), ("window_start>=?", start), ("window_end<=?", end)):
         if value is not None:
             where.append(clause)
@@ -163,23 +173,37 @@ def overview(
             )]
             if len(alerts) > 1000:
                 raise HTTPException(413, "Over 1000 rule results selected; narrow the time range")
+    # Each station has one selected detector; snapshots must be disjoint to sum counts.
+    contexts, last_end = {}, {}
+    for row in windows:
+        line = row["line_id"]
+        context = tuple(row[name] for name in ("category", "model_version", "threshold_version"))
+        if line in contexts and contexts[line] != context:
+            raise HTTPException(409, f"Multiple detector contexts for station {line}; select an explicit station/detector or use a separate run")
+        contexts[line] = context
+        start_at = datetime.fromisoformat(row["window_start"])
+        end_at = datetime.fromisoformat(row["window_end"])
+        if line in last_end and start_at < last_end[line]:
+            raise HTTPException(409, f"Overlapping quality windows for station {line}; use a single window contract")
+        last_end[line] = end_at
     stations = {}
     for row in windows:
         station = stations.setdefault(row["line_id"], {
-            "line_id": row["line_id"], "inspections": 0, "rejects": 0, "updated_at": row["updated_at"],
+            "line_id": row["line_id"], **{name: row[name] for name in ("category", "model_version", "threshold_version")}, "inspections": 0, "rejects": 0, "updated_at": row["updated_at"],
         })
         station["inspections"] += row["inspections"]
         station["rejects"] += row["rejects"]
         station["updated_at"] = max(station["updated_at"], row["updated_at"])
     observations, observation_state, observation_batch = station_observations(run_id, category, model_version, threshold_version)
     for station in stations.values():
-        station["latest_observation"] = observations.get(station["line_id"])
+        station["latest_observation"] = observations.get(tuple(station[name] for name in ("line_id", "category", "model_version", "threshold_version")))
         station["accepted"] = station["inspections"] - station["rejects"]
         station["reject_rate"] = station["rejects"] / station["inspections"] if station["inspections"] else None
     return {
         "state": "missing" if connection is None else "ready" if windows else "empty",
         "response_time": datetime.now(timezone.utc).isoformat(),
         "updated_at": max((row["updated_at"] for row in windows), default=None),
+        "scope": "detector" if detector else "run",
         "stations": list(stations.values()), "windows": windows, "alerts": alerts,
         "observation_state": observation_state, "observation_batch_at": observation_batch,
     }
