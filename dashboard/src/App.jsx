@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getJson, utcFilter } from './api.js';
 import RecentInspections from './RecentInspections.jsx';
+import StationObservation from './StationObservation.jsx';
 
 const runKey = (run) => JSON.stringify([run.run_id, run.category, run.model_version, run.threshold_version]);
 const percent = (value) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
@@ -136,11 +137,12 @@ export default function App() {
       <p className="freshness">Response: {utc(data.response_time)} · Last stored update: {utc(data.updated_at)} · Refresh every 5 seconds</p>
       {data.updated_at && stale(data.updated_at) && <p className="warning">No recent stored results. The source may be idle or processing may have stopped.</p>}
       {context?.model_version.startsWith('fixture') && <p className="notice">Fixture mode: predictions and image references are synthetic.</p>}
+      {data.observation_state === 'unavailable' && <p className="warning">Station observations are unavailable. Quality-window results remain available.</p>}
       <p>Counts cover selected stored windows. Provisional results can change; predicted accepts are not confirmed product passes.</p>
       {!stations.length ? <p className="notice">No stored windows match this station or time range.</p> : stationId ? <>
         <Counts stations={stations} />
         <section><h3>Latest station context</h3><p>Model: {context?.model_version} · Category: {context?.category} · Threshold version: {context?.threshold_version}</p>
-          <p>Work order, machine state, temperature and conveyor speed: unavailable.</p></section>
+          <StationObservation item={stations[0]?.latest_observation} /></section>
         <section><h3>Window history</h3><Windows rows={windows} /></section>
         <section><h3>Rule evaluations</h3><Rules rows={alerts} windows={windows} /></section>
       </> : summary ? <>
@@ -153,7 +155,7 @@ export default function App() {
           <h3><a href={`#station=${encodeURIComponent(station.line_id)}`}>Station {station.line_id}</a></h3>
           <p><span className={`badge ${stale(station.updated_at) ? 'stale' : 'clear'}`}>{stale(station.updated_at) ? 'Stale results' : 'Recent results'}</span></p>
           <Counts stations={[station]} /><p>Model: {context?.model_version}</p>
-          <p>Machine state / temperature / work order: unavailable</p><small>Last stored update: {utc(station.updated_at)}</small>
+          <StationObservation item={station.latest_observation} /><small>Last stored update: {utc(station.updated_at)}</small>
         </section>)}</div>
       </>}
     </>}

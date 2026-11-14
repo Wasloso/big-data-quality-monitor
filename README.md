@@ -28,11 +28,11 @@ See [the context and runtime transition guide](docs/station-context.md) before u
 - [x] Fit and evaluate the first CPU PatchCore bottle artifact using a normal-validation threshold (capsule pending).
 - [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.
 - [x] Add a bounded read-only FastAPI view of existing quality results (UI1).
-- [x] Add initial React station/summary/detail views over the quality API (UI2; simulation context now available through the serving API).
+- [x] Add initial React station/summary/detail views over the quality API (UI2; persisted simulated context now shown on station cards/details).
 - [x] Project clean history into bounded recent inspections/latest observations (UI3 foundation).
 - [x] Display paged recent items and selected images from an optional confined local root.
 - [x] Add continuous station processes with real bottle inference, independent stop/restart and local producer status.
-- [x] Persist versioned simulated machine context through Kafka/Spark/SQLite/API.
+- [x] Persist versioned simulated machine context through Kafka/Spark/SQLite/API and display it with observation age in React.
 - [ ] Add the capsule artifact and producer-status API/UI.
 - [ ] Complete the mixed-category image demo and measure full recovery, throughput and visibility delays.
 

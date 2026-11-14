@@ -5,7 +5,7 @@ main { max-width: 1250px; margin: auto; padding: 28px; }
 h1, h2, h3 { margin-top: 0; }
 h1 { margin-bottom: 8px; }
 h2 { margin-top: 26px; }
-p { line-height: 1.5; }
+p { line-height: 1.5; overflow-wrap: anywhere; }
 a { color: #185ba5; }
 header { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 header p { margin-top: 0; color: #586579; }

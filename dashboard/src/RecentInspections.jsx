@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getJson, utcFilter } from './api.js';
+import StationObservation from './StationObservation.jsx';
 
 const utc = (value) => value ? new Date(value).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : 'Unavailable';
 
@@ -75,6 +76,7 @@ export default function RecentInspections({ context, stationId, from, to, refres
             <dt>Prediction</dt><dd>{selected.is_reject ? 'Predicted reject' : 'Predicted accept'}</dd>
             <dt>Model / threshold version</dt><dd>{selected.model_version} / {selected.threshold_version}</dd>
           </dl>
+          <StationObservation item={selected} label="Context recorded with this inspection" />
           {!selected.image_url ? <p>Image storage is not connected.</p> : imageFailed
             ? <p>Image unavailable for this inspection.</p>
             : <img src={selected.image_url} alt={`Inspection ${selected.inspection_id}`} onError={() => setImageFailed(true)} />}

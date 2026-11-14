@@ -77,5 +77,19 @@
     "Producer status remains a local artifact, not served through the API.",
     "Sequential drains are not a live latency, processor-recovery or capacity benchmark.",
     "Legacy runtime state was retained; fresh v2 state is a schema transition, not recovery."
-  ]
+  ],
+  "browser_check": {
+    "run_id": "context-4673f9123e",
+    "checks": [
+      "A/B persisted simulated readings",
+      "selected inspection context",
+      "stale observation unknown state",
+      "legacy missing context",
+      "observation-source failure preserves quality cards",
+      "real photo",
+      "390px layout"
+    ],
+    "page_errors": [],
+    "unavailable_observation_ui": "HTTP response fault injection; separate API check uses an actual missing-table database"
+  }
 }

@@ -53,3 +53,10 @@ The inspection projection retains context with the same retry/latest-order/reten
 Two actual bottle station processes published ten predictions with different A/B work orders and nominal readings. Raw and clean context objects/scores matched Kafka; one injected numeric-string temperature stayed invalid in raw and was absent from clean/serving results. API inspection/latest-observation fields matched all ten original records; quality totals were A=4/3 predicted rejects and B=6/4, with provisional windows. An actual source PNG passed the HTTP hash check.
 
 The existing finalized-window/history scenario also passed with context present, retaining its independent fixture totals. Twelve fast checks and four opt-in API checks passed; existing methods were extended, with no new default tests or dependencies. Ingestion against the retained legacy checkpoint refused it with exit code 1. See the [small observed record](results/station-context-integration.json). Browser presentation is verified separately from this backend trace.
+
+
+## Checked React presentation
+
+Station cards/details show the latest persisted observation for the run, with a simulation label and timestamp. The selected-inspection panel shows its own recorded context so older photos do not inherit newer readings. A temporary real-container browser walkthrough verified A/B work orders/readings, per-inspection context, an actual source photo, stale/current-unknown warnings, unknown context for replayed legacy fixtures, independent observation-source failure and a 390px layout without page errors. The source-failure UI case used HTTP response fault injection; the API check separately used an actual broken projection schema.
+
+The first browser run needed the already extracted temporary Chromium audio library path. The narrow-screen check then found long real product IDs overflowing a paragraph; adding paragraph wrapping fixed it and the same walkthrough passed. Browser scripts/screenshots remain under `/tmp/bdqm-context-ui`; no UI framework or new project dependency was added.
