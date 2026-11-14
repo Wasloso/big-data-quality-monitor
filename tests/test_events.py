@@ -34,7 +34,19 @@ class InspectionTests(unittest.TestCase):
 
     def test_invalid_payloads_are_rejected(self):
         valid = next(sample_events())
+        context = {"version": 1, "simulated": True, "work_order": "WO-01", "operation": "inspection",
+                   "reported_state": "running", "temperature_c": 35.2, "conveyor_speed_m_min": 12.0}
+        validate_event({**valid, "station_context": context})
+        validate_event({**valid, "station_context": None})
+        control = next(progress_events([{**valid, "station_context": context}], valid["event_time"]))
+        self.assertIsNone(control["station_context"])
         invalid = [
+            *({**valid, "station_context": {**context, **change}} for change in (
+                {"version": True}, {"version": 2}, {"simulated": False}, {"simulated": 1},
+                {"work_order": " "}, {"temperature_c": float("nan")}, {"temperature_c": "35"},
+                {"conveyor_speed_m_min": True}, {"conveyor_speed_m_min": -1},
+            )),
+            {**control, "station_context": context},
             {**valid, "schema_version": 2},
             {**valid, "schema_version": True},
             {**valid, "record_kind": "unknown"},

@@ -43,7 +43,7 @@ Vite provides the development URL (normally `http://127.0.0.1:5173`) and proxies
 
 ## Recent individual inspections (UI3 foundation)
 
-First build the [inspection serving view](inspection-serving.md) with `spark-inspections`. The API reads its separate `STATIONS_DATABASE` (default `/data/serving/stations.sqlite`) through the existing narrow serving mount. It never queries clean Parquet directly.
+First build the [inspection serving view](inspection-serving.md) with `spark-inspections`. The API reads its separate `STATIONS_DATABASE` (default `/data/serving/stations-v2.sqlite`) through the existing narrow serving mount. It never queries clean Parquet directly.
 
 `GET /api/inspections` requires `run_id`, `line_id`, `category`, `model_version` and `threshold_version`. It returns recent inspection metadata, `latest_inspection`, `retained_count`, a projection batch timestamp and a `next_cursor`. `limit` defaults to 50 and is capped at 100. To request the next page, pass both returned cursor fields as `before_time` and `before_id`; time must include its UTC offset. Ordering is acquisition time descending, then inspection ID descending, so equal-time items do not disappear between pages.
 
@@ -58,3 +58,8 @@ Optional `from_time` and `to_time` on `/api/inspections` select individual items
 Open a station to see its retained item list, independently refreshed every five seconds. Select **View** to inspect one record; use **Older items** and **Latest items** to move between bounded 50-item pages. Run/station/detector and the UTC date filters apply to this list. Controls support seconds without treating browser-local time as acquisition time. The page keeps quality-window totals separate from retained sample counts.
 
 Configure the [optional local image mount](inspection-images.md) to show photos. Without a configured root, the panel says image storage is not connected. A missing/unreadable image displays an unavailable state; manual Refresh can retry it. The fixture model remains labeled synthetic. Inspecting an image does not turn its score into a confirmed defect or probability. Numeric detector threshold values and maps require the future model artifacts; the current panel displays their version identifiers.
+
+
+## Persisted simulated observations
+
+Retained items and latest observations now include nullable `station_context`. Overview station rows include `latest_observation`, with separate top-level `observation_state` and `observation_batch_at`. The observation source is read independently of quality windows; its failure returns unavailable context without hiding valid quality totals. Latest observations are scoped to the run/detector and are not filtered to an old selected window range. Invalid stored context is an explicit unavailable state. See [context schema and runtime transition](station-context.md) for the versioned archive/checkpoint/database paths and simulator settings.

@@ -137,7 +137,7 @@ services:
           subpath: serving
           nocopy: true
     environment:
-      QUALITY_DATABASE: /data/serving/quality.sqlite
+      QUALITY_DATABASE: /data/serving/quality-v2.sqlite
 
   api:
     build:
@@ -153,8 +153,8 @@ services:
           subpath: serving
           nocopy: true
     environment:
-      QUALITY_DATABASE: /data/serving/quality.sqlite
-      STATIONS_DATABASE: /data/serving/stations.sqlite
+      QUALITY_DATABASE: /data/serving/quality-v2.sqlite
+      STATIONS_DATABASE: /data/serving/stations-v2.sqlite
 
   spark-check:
     image: apache/spark:4.0.2

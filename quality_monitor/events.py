@@ -38,21 +38,43 @@ def validate_event(event):
             raise ValueError(f"{name} must include a UTC offset")
 
     if event["record_kind"] == "progress":
+        if event.get("station_context") is not None:
+            raise ValueError("Progress records must not contain station observations")
         if event.get("anomaly_score") is not None or event.get("is_reject") is not None:
             raise ValueError("Progress records must not contain predictions")
         return
 
-    score = event.get("anomaly_score")
-    if type(score) not in (int, float):
-        raise ValueError("anomaly_score must be a finite number")
-    try:
-        finite = math.isfinite(score)
-    except OverflowError:
-        finite = False
-    if not finite:
+    context = event.get("station_context")
+    if context is not None:
+        validate_station_context(context)
+    if not finite_number(event.get("anomaly_score")):
         raise ValueError("anomaly_score must be a finite number")
     if type(event.get("is_reject")) is not bool:
         raise ValueError("is_reject must be a boolean")
+
+
+def finite_number(value):
+    try:
+        return type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def validate_station_context(context):
+    if not isinstance(context, dict) or type(context.get("version")) is not int or context["version"] != 1:
+        raise ValueError("station_context must use version 1")
+    if context.get("simulated") is not True:
+        raise ValueError("Station readings must be explicitly simulated")
+    for name in ("work_order", "operation"):
+        if not isinstance(context.get(name), str) or not context[name].strip():
+            raise ValueError(f"station_context.{name} must be nonempty")
+    if context.get("reported_state") not in ("running", "idle", "maintenance"):
+        raise ValueError("Unknown reported station state")
+    for name in ("temperature_c", "conveyor_speed_m_min"):
+        if not finite_number(context.get(name)):
+            raise ValueError(f"station_context.{name} must be finite numeric data")
+    if context["conveyor_speed_m_min"] < 0:
+        raise ValueError("Conveyor speed must be nonnegative")
 
 
 def parse_event(line):

@@ -1,0 +1,81 @@
+{
+  "recorded_date": "2026-11-14",
+  "run_id": "context-4673f9123e",
+  "scope": "Actual bottle inference through Kafka, raw/clean Parquet, v2 serving databases and HTTP API",
+  "archive_check": {
+    "run_id": "context-4673f9123e",
+    "valid_raw_inspections": 10,
+    "invalid_context_raw_rows": 1,
+    "invalid_reason": "station_context.temperature_c must be finite numeric data",
+    "clean_inspections": 10,
+    "all_contexts_and_scores_match_kafka": true
+  },
+  "serving_check": {
+    "station_counts": {
+      "A": {
+        "inspections": 4,
+        "rejects": 3
+      },
+      "B": {
+        "inspections": 6,
+        "rejects": 4
+      }
+    },
+    "matching_inspection_ids": 10,
+    "all_windows_provisional": true,
+    "all_contexts_match": true,
+    "sample_source_image": {
+      "inspection_id": "context-4673f9123e:B:97e597e89b2549debb977dfb97927cc8:6",
+      "image_uri": "bottle/test/good/000.png",
+      "sha256": "9e7bfe658efe9b6db2607a96405b4ac6880936eaf93b89c85bcd311122ceb57b",
+      "http_status": 200
+    }
+  },
+  "pipeline_check": {
+    "spark_version": "4.0.2",
+    "path": "/data/c06-check-47b8421d7cfb46b391b54cc1991ce7e2",
+    "watermark_before_delayed_inspections": "2026-11-07T12:00:30.000Z",
+    "final_counts": {
+      "A": {
+        "inspections": 60,
+        "rejects": 6,
+        "reject_rate": 0.1
+      },
+      "B": {
+        "inspections": 60,
+        "rejects": 12,
+        "reject_rate": 0.2
+      }
+    },
+    "within_allowance_accepted": 2,
+    "beyond_allowance_clean_rows": 0,
+    "invalid_raw_rows": 2,
+    "duplicate_injections": 10,
+    "controls_in_clean": 4,
+    "final_windows": 2,
+    "historical_reconciliation": "passed",
+    "station_context_preserved": true,
+    "history_report": "/data/c06-check-47b8421d7cfb46b391b54cc1991ce7e2/history.json",
+    "result": "passed"
+  },
+  "runtime_namespace": "/data/v2",
+  "serving_databases": [
+    "quality-v2.sqlite",
+    "stations-v2.sqlite"
+  ],
+  "legacy_checkpoint_refusal_exit_code": 1,
+  "checks": {
+    "fast_tests": 12,
+    "opt_in_api_checks": 4,
+    "new_test_methods": 0,
+    "frontend_build": "passed",
+    "docker_builds": "passed"
+  },
+  "limitations": [
+    "Both stations use the bottle model; capsule remains pending.",
+    "Per-inspection context is explicitly simulated, not an independent sensor heartbeat.",
+    "Producer status remains a local artifact, not served through the API.",
+    "Sequential drains are not a live latency, processor-recovery or capacity benchmark.",
+    "Legacy runtime state was retained; fresh v2 state is a schema transition, not recovery."
+  ]
+}

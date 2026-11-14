@@ -5,10 +5,10 @@
 After a clean archive exists, start the provisional serving writer:
 
 ```bash
-docker compose run --build --rm spark-windows --database /data/serving/quality.sqlite --alert-threshold 0.15 --minimum-inspections 30
+docker compose run --build --rm spark-windows --database /data/serving/quality-v2.sqlite --alert-threshold 0.15 --minimum-inspections 30
 ```
 
-Use `--input` and `--checkpoint` for an isolated experiment as in the C06 instructions. `--once` drains available files. `--final` writes only watermark-finalized rows instead of provisional updates. Default SQLite checkpoints are `/data/checkpoints/windows-v2-sqlite-preview` and `/data/checkpoints/windows-v2-sqlite-final`; console checkpoint defaults are unchanged. Follow the C06 staged-drain/progress protocol for finalization. Only one driver should write a serving database at a time.
+Use `--input` and `--checkpoint` for an isolated experiment as in the C06 instructions. `--once` drains available files. `--final` writes only watermark-finalized rows instead of provisional updates. Default SQLite checkpoints are `/data/v2/checkpoints/windows-v2-sqlite-preview` and `/data/v2/checkpoints/windows-v2-sqlite-final`; console checkpoints use the same versioned `/data/v2/checkpoints` base. Follow the C06 staged-drain/progress protocol for finalization. Only one driver should write a serving database at a time.
 
 `foreachBatch` collects at most `--max-store-rows` aggregate rows (default 1000), using an extra row to detect overflow. An oversized batch fails before any database write; it is not truncated. Change this bound to match a measured aggregate workload. No inspection-history collection is used.
 

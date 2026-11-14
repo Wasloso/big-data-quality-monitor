@@ -29,6 +29,9 @@ def main():
     queries = []
     offset = 0
     events = list(sample_events())
+    context = {"version": 1, "simulated": True, "work_order": "fixture-context", "operation": "inspection",
+               "reported_state": "running", "temperature_c": 35.0, "conveyor_speed_m_min": 12.0}
+    events[0]["station_context"] = context
     expected = json.loads(Path("/app/tests/fixtures/expected_counts.json").read_text())
     evidence = {"spark_version": spark.version, "path": str(root)}
     database = root / "serving" / "quality.sqlite"
@@ -98,6 +101,8 @@ def main():
         drain()
         clean_history = spark.read.parquet(str(root / "clean"))
         assert clean_history.filter("record_kind = 'inspection'").count() == 120
+        observation = clean_history.filter(F.col("inspection_id") == events[0]["inspection_id"]).first()
+        assert observation.station_context.asDict() == context
         publish(list(progress_events(events, "2026-11-07T12:04:00+00:00")))
         drain()
         rows = finalized()
@@ -136,7 +141,7 @@ def main():
             "final_counts": counts, "within_allowance_accepted": len(delayed),
             "beyond_allowance_clean_rows": clean_history.filter(F.col("inspection_id") == "beyond-watermark").count(),
             "invalid_raw_rows": 2, "duplicate_injections": 10, "controls_in_clean": 4,
-            "final_windows": len(rows), "historical_reconciliation": report["result"],
+            "final_windows": len(rows), "historical_reconciliation": report["result"], "station_context_preserved": True,
             "history_report": str(root / "history.json"), "result": "passed",
         })
         (root / "result.json").write_text(json.dumps(evidence, indent=2) + "\n")

@@ -18,7 +18,7 @@ def progress_events(events, event_time):
         groups.add(group)
         control = {**event, "record_kind": "progress", "event_time": event_time}
         control["inspection_id"] = "progress:" + json.dumps([*group, event_time], separators=(",", ":"))
-        for name in ("product_id", "image_id", "image_uri", "anomaly_score", "is_reject"):
+        for name in ("product_id", "image_id", "image_uri", "anomaly_score", "is_reject", "station_context"):
             control[name] = None
         validate_event(control)
         yield control

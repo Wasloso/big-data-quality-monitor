@@ -33,7 +33,7 @@ def quality_windows(inspections, duration="1 minute", lateness="2 minutes"):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", default="/data/clean")
+    parser.add_argument("--input", default="/data/v2/clean")
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--window", default="1 minute")
     parser.add_argument("--lateness", default="2 minutes")
@@ -49,7 +49,7 @@ def main():
     if args.minimum_inspections < 1 or args.max_store_rows < 1:
         parser.error("Inspection and aggregate-row limits must be positive")
     checkpoint = args.checkpoint or (
-        f"/data/checkpoints/windows-v2-{'sqlite-' if args.database else ''}{'final' if args.final else 'preview'}"
+        f"/data/v2/checkpoints/windows-v2-{'sqlite-' if args.database else ''}{'final' if args.final else 'preview'}"
     )
     if args.database:
         database = str(Path(args.database).resolve())

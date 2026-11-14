@@ -1,6 +1,6 @@
 # Recent inspection serving view (UI3)
 
-The dashboard needs individual inspection references as well as window totals. `quality_monitor.project_inspections` reads the existing clean Parquet stream and writes `/data/serving/stations.sqlite`. Q1/Q2/Q3 and their checkpoints are unchanged. The full historical archive remains Parquet; this database is a bounded recent-item view, not the source for total production counts.
+The dashboard needs individual inspection references as well as window totals. `quality_monitor.project_inspections` reads the existing clean Parquet stream and writes `/data/serving/stations-v2.sqlite`. The [context schema transition](station-context.md) isolates the new archive/checkpoint/serving paths from retained legacy state. The full historical archive remains Parquet; this database is a bounded recent-item view, not the source for total production counts.
 
 Once clean Parquet exists:
 
@@ -8,7 +8,7 @@ Once clean Parquet exists:
 docker compose run --build --rm --no-deps spark-inspections --once
 ```
 
-Omit `--once` to process new files every five seconds. The defaults are input `/data/clean`, database `/data/serving/stations.sqlite` and checkpoint `/data/checkpoints/inspection-serving-v1`. Use `--input`, `--database` and `--checkpoint` together for an isolated replay. One process writes this database at a time. The API already mounts the serving subdirectory; it does not need access to raw/clean files.
+Omit `--once` to process new files every five seconds. The defaults are input `/data/v2/clean`, database `/data/serving/stations-v2.sqlite` and checkpoint `/data/v2/checkpoints/inspection-serving-v2`. Use `--input`, `--database` and `--checkpoint` together for an isolated replay. One process writes this database at a time. The API already mounts the serving subdirectory; it does not need access to raw/clean files.
 
 The projection stores valid inspections only. Controls contribute no sample or latest observation. Its two views are:
 

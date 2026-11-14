@@ -1,6 +1,6 @@
 # Continuous image stations (C11, first increment)
 
-`quality_monitor.station` runs actual CPU inference on a repeating image list and publishes completed predictions to Kafka until Ctrl+C. Each process loads one fitted category artifact; stations share the code, not a memory bank across different categories. The bottle artifact is checked. Capsule and persisted simulated machine readings are separate follow-ups.
+`quality_monitor.station` runs actual CPU inference on a repeating image list and publishes completed predictions to Kafka until Ctrl+C. Each process loads one fitted category artifact; stations share the code, not a memory bank across different categories. The bottle artifact is checked. Simulated machine context is now persisted; capsule and producer-status API/UI are separate follow-ups. Read [the v2 state transition](station-context.md) before resuming existing runtime data.
 
 ## Start locally
 
@@ -65,7 +65,7 @@ The existing Spark commands accept these version-1 inspections. To drain a bound
 ```bash
 docker compose -f compose.yaml -f compose.local-kafka.yaml run --rm --no-deps spark-ingest --once
 docker compose run --rm --no-deps spark-deduplicate --once
-docker compose run --rm --no-deps spark-windows --database /data/serving/quality.sqlite --once
+docker compose run --rm --no-deps spark-windows --database /data/serving/quality-v2.sqlite --once
 docker compose run --rm --no-deps spark-inspections --once
 ```
 
@@ -79,4 +79,4 @@ The first actual-broker check started two bottle processes at target rates 2/s a
 
 After the producers stopped, sequential available-now drains resumed the retained Q1/Q2/Q3/projection checkpoints. The API matched all 39 Kafka inspection IDs, scores and image references; aggregate counts were A=7/5 predicted rejects and B=32/22. All quality windows remained provisional. One actual source PNG was served over HTTP and its SHA256 matched the dataset file.
 
-This is integration evidence, not a throughput benchmark or capsule validation. See the small [station integration record](results/bottle-station-integration.json) for the downstream check outcome. Full continuously observed Kafka-to-browser timing, simulated work-order/temperature/speed context, producer-status API/UI, actual A/bottle+B/capsule acceptance, controlled finalization, C12 reconciliation, C13 retained-state recovery and C14 capacity experiments remain open.
+This is integration evidence, not a throughput benchmark or capsule validation. See the small [station integration record](results/bottle-station-integration.json) for the downstream check outcome. Full continuously observed Kafka-to-browser timing, producer-status API/UI, actual A/bottle+B/capsule acceptance, controlled finalization, C12 reconciliation, C13 retained-state recovery and C14 capacity experiments remain open.

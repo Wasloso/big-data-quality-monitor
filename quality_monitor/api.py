@@ -1,6 +1,7 @@
 """Read-only HTTP access to the local quality serving database."""
 
 import os
+import json
 import sqlite3
 from contextlib import closing, contextmanager
 from datetime import datetime, timezone
@@ -11,10 +12,12 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+from quality_monitor.events import validate_station_context
+
 
 app = FastAPI(title="Quality monitor API")
-DATABASE = Path(os.environ.get("QUALITY_DATABASE", "/data/serving/quality.sqlite"))
-STATIONS_DATABASE = Path(os.environ.get("STATIONS_DATABASE", "/data/serving/stations.sqlite"))
+DATABASE = Path(os.environ.get("QUALITY_DATABASE", "/data/serving/quality-v2.sqlite"))
+STATIONS_DATABASE = Path(os.environ.get("STATIONS_DATABASE", "/data/serving/stations-v2.sqlite"))
 IMAGE_ROOT = Path(os.environ["INSPECTION_IMAGE_ROOT"]) if os.environ.get("INSPECTION_IMAGE_ROOT") else None
 
 
@@ -53,6 +56,39 @@ def utc_bound(value, timespec="auto"):
     if value.tzinfo is None or value.utcoffset() is None:
         raise HTTPException(422, "Time filters must include a UTC offset")
     return value.astimezone(timezone.utc).isoformat(timespec=timespec)
+
+
+def decoded_context(value):
+    if value is None:
+        return None
+    try:
+        context = json.loads(value)
+        validate_station_context(context)
+    except (ValueError, TypeError) as error:
+        raise HTTPException(503, "Stored station context is unavailable or invalid") from error
+    return context
+
+
+def station_observations(run_id, category, model_version, threshold_version):
+    try:
+        with snapshot(STATIONS_DATABASE) as connection:
+            if connection is None:
+                return {}, "missing", None
+            rows = connection.execute("""
+                SELECT * FROM station_latest
+                WHERE run_id=? AND category=? AND model_version=? AND threshold_version=? LIMIT 501
+            """, (run_id, category, model_version, threshold_version)).fetchall()
+            if len(rows) > 500:
+                raise HTTPException(413, "Over 500 station observations selected")
+            batch = connection.execute("SELECT MAX(processed_at) FROM processed_batches").fetchone()[0]
+        observations = {row["line_id"]: {
+            "event_time": row["event_time"], "inspection_id": row["inspection_id"],
+            "station_context": decoded_context(dict(row).get("station_context")),
+        } for row in rows}
+        return observations, "ready", batch
+    except (HTTPException, ValueError):
+        # The independent observation source must not hide valid quality-window totals.
+        return {}, "unavailable", None
 
 
 @app.get("/api/overview")
@@ -99,7 +135,9 @@ def overview(
         station["inspections"] += row["inspections"]
         station["rejects"] += row["rejects"]
         station["updated_at"] = max(station["updated_at"], row["updated_at"])
+    observations, observation_state, observation_batch = station_observations(run_id, category, model_version, threshold_version)
     for station in stations.values():
+        station["latest_observation"] = observations.get(station["line_id"])
         station["accepted"] = station["inspections"] - station["rejects"]
         station["reject_rate"] = station["rejects"] / station["inspections"] if station["inspections"] else None
     return {
@@ -107,6 +145,7 @@ def overview(
         "response_time": datetime.now(timezone.utc).isoformat(),
         "updated_at": max((row["updated_at"] for row in windows), default=None),
         "stations": list(stations.values()), "windows": windows, "alerts": alerts,
+        "observation_state": observation_state, "observation_batch_at": observation_batch,
     }
 
 
@@ -154,6 +193,7 @@ def inspections(
     rows = rows[:limit]
     for row in rows + ([latest] if latest else []):
         row["is_reject"] = bool(row["is_reject"])
+        row["station_context"] = decoded_context(row.get("station_context"))
         row["image_url"] = "/api/inspection-image?" + urlencode({
             "run_id": row["run_id"], "inspection_id": row["inspection_id"],
         }) if IMAGE_ROOT is not None else None

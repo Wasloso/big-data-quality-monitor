@@ -1,5 +1,6 @@
 """Bounded recent inspections and latest observations for the dashboard."""
 
+import json
 import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone
@@ -11,7 +12,7 @@ from quality_monitor.events import validate_event
 COLUMNS = (
     "run_id", "inspection_id", "line_id", "category", "model_version", "threshold_version",
     "scenario_id", "product_id", "image_id", "image_uri", "event_time", "published_at",
-    "anomaly_score", "is_reject", "stored_at",
+    "anomaly_score", "is_reject", "station_context", "stored_at",
 )
 
 
@@ -29,6 +30,10 @@ def write_inspections(database, rows, epoch, batch_id, *, retention=1000):
         raise ValueError("Inspection retention must be positive")
     Path(database).parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(database, timeout=30)) as connection, connection:
+        for table in ("inspection_samples", "station_latest"):
+            columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+            if columns and "station_context" not in columns:
+                raise ValueError("Legacy station database; keep it intact and use stations-v2.sqlite with a new checkpoint")
         connection.execute("PRAGMA journal_mode=WAL")
         connection.executescript("""
             CREATE TABLE IF NOT EXISTS inspection_samples (
@@ -36,7 +41,7 @@ def write_inspections(database, rows, epoch, batch_id, *, retention=1000):
                 category TEXT NOT NULL, model_version TEXT NOT NULL, threshold_version TEXT NOT NULL,
                 scenario_id TEXT NOT NULL, product_id TEXT NOT NULL, image_id TEXT NOT NULL,
                 image_uri TEXT NOT NULL, event_time TEXT NOT NULL, published_at TEXT NOT NULL,
-                anomaly_score REAL NOT NULL, is_reject INTEGER NOT NULL, stored_at TEXT NOT NULL,
+                anomaly_score REAL NOT NULL, is_reject INTEGER NOT NULL, station_context TEXT, stored_at TEXT NOT NULL,
                 PRIMARY KEY(run_id, inspection_id)
             );
             CREATE INDEX IF NOT EXISTS samples_recent
@@ -46,7 +51,7 @@ def write_inspections(database, rows, epoch, batch_id, *, retention=1000):
                 category TEXT NOT NULL, model_version TEXT NOT NULL, threshold_version TEXT NOT NULL,
                 scenario_id TEXT NOT NULL, product_id TEXT NOT NULL, image_id TEXT NOT NULL,
                 image_uri TEXT NOT NULL, event_time TEXT NOT NULL, published_at TEXT NOT NULL,
-                anomaly_score REAL NOT NULL, is_reject INTEGER NOT NULL, stored_at TEXT NOT NULL,
+                anomaly_score REAL NOT NULL, is_reject INTEGER NOT NULL, station_context TEXT, stored_at TEXT NOT NULL,
                 PRIMARY KEY(run_id, line_id, category, model_version, threshold_version)
             );
             CREATE TABLE IF NOT EXISTS processed_batches (
@@ -70,16 +75,18 @@ def write_inspections(database, rows, epoch, batch_id, *, retention=1000):
             validate_event(row)
             if row["record_kind"] != "inspection":
                 continue
+            context = row.get("station_context")
+            row["station_context"] = json.dumps(context, allow_nan=False) if context is not None else None
             row["stored_at"] = now
             values = [row[name] for name in COLUMNS]
             inserted = connection.execute(
-                f"INSERT INTO inspection_samples VALUES ({placeholders}) ON CONFLICT(run_id, inspection_id) DO NOTHING",
+                f"INSERT INTO inspection_samples ({','.join(COLUMNS)}) VALUES ({placeholders}) ON CONFLICT(run_id, inspection_id) DO NOTHING",
                 values,
             ).rowcount
             if not inserted:
                 continue
             connection.execute(f"""
-                INSERT INTO station_latest VALUES ({placeholders})
+                INSERT INTO station_latest ({','.join(COLUMNS)}) VALUES ({placeholders})
                 ON CONFLICT(run_id, line_id, category, model_version, threshold_version)
                 DO UPDATE SET {assignments}
                 WHERE excluded.event_time > station_latest.event_time

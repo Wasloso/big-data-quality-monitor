@@ -10,7 +10,7 @@ from pyspark.sql import SparkSession, functions as F
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", required=True)
-    parser.add_argument("--path", default="/data/raw")
+    parser.add_argument("--path", default="/data/v2/raw")
     parser.add_argument("--clean", action="store_true", help="Check flattened clean inspections and logical uniqueness")
     parser.add_argument("--invalid-key", default=None)
     parser.add_argument("--expected-invalid", type=int, default=0)

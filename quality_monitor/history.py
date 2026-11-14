@@ -140,7 +140,7 @@ def reconcile(spark, clean_path, raw_path, database, run_id, duration="1 minute"
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, required=True, help="Q3 SQLite checkpoint containing quality-store.json")
-    parser.add_argument("--raw", type=Path, default=Path("/data/raw"))
+    parser.add_argument("--raw", type=Path, default=Path("/data/v2/raw"))
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--output", type=Path, required=True, help="New JSON report file, never overwritten")
     parser.add_argument("--expected", type=Path, help="Optional independent per-station counts/rates JSON")

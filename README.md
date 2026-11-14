@@ -8,7 +8,9 @@ We want to monitor product quality across simulated production lines. A vision m
 
 Kafka, Spark validation/deduplication/windowing, Parquet history and SQLite serving views are implemented. FastAPI and React show quality windows, alerts and bounded recent inspections with an optional local image mount. The finite synthetic fixture remains a separate correctness/replay mode.
 
-The original MVTec bottle data is prepared and a CPU PatchCore artifact has been fitted and evaluated with a frozen normal-validation threshold. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Capsule, simulated machine context, producer-status presentation and full recovery/capacity experiments remain incomplete. Historical Spark reconciliation is checked against finalized SQLite windows and an independent fixture oracle.
+The original MVTec bottle data is prepared and a CPU PatchCore artifact has been fitted and evaluated with a frozen normal-validation threshold. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Simulated work-order/operation/temperature/speed context now persists through the pipeline and serving API. Capsule, producer-status presentation and full recovery/capacity experiments remain incomplete. Historical Spark reconciliation is checked against finalized SQLite windows and an independent fixture oracle.
+
+See [the context and runtime transition guide](docs/station-context.md) before using the new v2 archive/checkpoint/serving paths; previous runtime state is retained.
 
 ## Roadmap
 
@@ -26,11 +28,12 @@ The original MVTec bottle data is prepared and a CPU PatchCore artifact has been
 - [x] Fit and evaluate the first CPU PatchCore bottle artifact using a normal-validation threshold (capsule pending).
 - [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.
 - [x] Add a bounded read-only FastAPI view of existing quality results (UI1).
-- [x] Add initial React station/summary/detail views over the quality API (UI2; simulated machine context pending).
+- [x] Add initial React station/summary/detail views over the quality API (UI2; simulation context now available through the serving API).
 - [x] Project clean history into bounded recent inspections/latest observations (UI3 foundation).
 - [x] Display paged recent items and selected images from an optional confined local root.
 - [x] Add continuous station processes with real bottle inference, independent stop/restart and local producer status.
-- [ ] Add the capsule artifact, persisted simulated context and producer-status API/UI.
+- [x] Persist versioned simulated machine context through Kafka/Spark/SQLite/API.
+- [ ] Add the capsule artifact and producer-status API/UI.
 - [ ] Complete the mixed-category image demo and measure full recovery, throughput and visibility delays.
 
 ## Publish inspections to Kafka
@@ -75,7 +78,7 @@ docker compose run --build --rm spark-ingest --once
 
 Use a different run ID for each new sample; deliberately publishing the same logical inspections twice will still create two records at this stage. For ongoing ingestion, omit `--once`. Stop that process before running another ingestion job with the same checkpoint.
 
-The Spark–Kafka connector is pinned to `org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.2`, matching Spark 4.0.2. Its first run downloads Maven dependencies; these are cached in the `archive-data` volume. The same volume stores `/data/raw` and `/data/checkpoints/ingest`, so ordinary `docker compose down` preserves both. Keep output and checkpoint together; do not delete one or reuse them with a different topic/query. `startingOffsets=earliest` applies only to the first run; later runs resume from their checkpoint. Kafka retention still limits how long an unread message is available.
+The Spark–Kafka connector is pinned to `org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.2`, matching Spark 4.0.2. Its first run downloads Maven dependencies; these are cached in the `archive-data` volume. The same volume stores `/data/v2/raw` and `/data/v2/checkpoints/ingest`, so ordinary `docker compose down` preserves both. Keep output and checkpoint together; do not delete one or reuse them with a different topic/query. `startingOffsets=earliest` applies only to the first run; later runs resume from their checkpoint. Kafka retention still limits how long an unread message is available.
 
 Every archived row includes the Kafka topic, partition, offset, key, Kafka timestamp, ingestion timestamp, original JSON payload, parsed `event` fields, `is_valid`, and `validation_error`. The existing Python event validator runs on the original payload before Spark can coerce incorrect types. Invalid messages remain in the same raw archive, tagged `is_valid=false`; this is a logical quarantine, not a separate directory. Consumers must filter for valid records. Event timestamps remain strings in the parsed structure for now.
 
@@ -95,14 +98,14 @@ After ingestion has created the raw archive, run:
 docker compose run --build --rm spark-deduplicate --once
 ```
 
-This reads `/data/raw`, filters `is_valid=true`, converts `event_time` to a Spark timestamp in UTC, and deduplicates by `(run_id, inspection_id)` using a two-minute event-time watermark. Validated event fields are flattened in `/data/clean`, with the original topic/partition/offset and ingestion timestamp retained. Raw history, including invalid messages and repeated inspections, is unchanged.
+This reads `/data/v2/raw`, filters `is_valid=true`, converts `event_time` to a Spark timestamp in UTC, and deduplicates by `(run_id, inspection_id)` using a two-minute event-time watermark. Validated event fields are flattened in `/data/v2/clean`, with the original topic/partition/offset and ingestion timestamp retained. Raw history, including invalid messages and repeated inspections, is unchanged.
 
-The deduplication job has its own persistent checkpoint at `/data/checkpoints/deduplicate`. Omit `--once` for ongoing file-stream processing. Run only one job per checkpoint; keep its input, output, checkpoint, and shuffle settings consistent on restart. The local job uses two shuffle partitions. No Kafka connector is needed for this file-to-file stage.
+The deduplication job has its own persistent checkpoint at `/data/v2/checkpoints/deduplicate`. Omit `--once` for ongoing file-stream processing. Run only one job per checkpoint; keep its input, output, checkpoint, and shuffle settings consistent on restart. The local job uses two shuffle partitions. No Kafka connector is needed for this file-to-file stage.
 
 For the sample run from the ingestion example, reuse the existing check:
 
 ```bash
-docker compose run --rm --no-deps --entrypoint /opt/spark/bin/spark-submit spark-ingest --master 'local[2]' /app/quality_monitor/archive_check.py --path /data/clean --clean --run-id archive-demo-1
+docker compose run --rm --no-deps --entrypoint /opt/spark/bin/spark-submit spark-ingest --master 'local[2]' /app/quality_monitor/archive_check.py --path /data/v2/clean --clean --run-id archive-demo-1
 ```
 
 `--clean` checks the flattened fields and also rejects repeated logical inspection identities. The expected sample still has 120 inspections: A=60/6 and B=60/12. This check is explicitly invoked, not part of the fast unit suite.
@@ -121,9 +124,9 @@ docker compose run --build --rm spark-windows --once
 
 Omit `--once` to process new clean files every five seconds. The job groups inspections into non-overlapping one-minute UTC event-time windows, separately by run, line, category, model version, and threshold version. It prints inspection counts, predicted reject counts, and predicted reject rates in console update mode. The sample's minute should show A=60/6 (0.10) and B=60/12 (0.20).
 
-`--window '30 seconds'` and `--lateness '2 minutes'` configure the window and watermark allowance. The default checkpoint is `/data/checkpoints/windows-v2-preview`, or `/data/checkpoints/windows-v2-final` with `--final`; use one writer per checkpoint and keep the input, mode, grouping, window, watermark, and shuffle settings consistent on restart. Use a separate checkpoint when changing query settings. The earlier `/data/checkpoints/windows` belongs to the inspection-only aggregate state: do not reuse it with this version. Keep old outputs/checkpoints for inspection; replay into new state deliberately rather than deleting existing runtime data.
+`--window '30 seconds'` and `--lateness '2 minutes'` configure the window and watermark allowance. The default checkpoint is `/data/v2/checkpoints/windows-v2-preview`, or `/data/v2/checkpoints/windows-v2-final` with `--final`; use one writer per checkpoint and keep the input, mode, grouping, window, watermark, and shuffle settings consistent on restart. Use a separate checkpoint when changing query settings. The earlier `/data/v2/checkpoints/windows` belongs to the inspection-only aggregate state: do not reuse it with this version. Keep old outputs/checkpoints for inspection; replay into new state deliberately rather than deleting existing runtime data.
 
-Default console rows are provisional snapshots, not increments to sum. Add `--final` to emit only watermark-finalized windows using append mode. Controls contribute zero counts; control-only windows are suppressed after aggregation. A restart resumes processing without reprinting all past rows. The console shows at most 20 rows per batch and is intended for small demos, not durable serving. A finite or idle stream does not advance its watermark by wall-clock time. Add `--database /data/serving/quality.sqlite` to persist snapshots and rule statuses; see [the serving-store instructions](docs/serving-store.md).
+Default console rows are provisional snapshots, not increments to sum. Add `--final` to emit only watermark-finalized windows using append mode. Controls contribute zero counts; control-only windows are suppressed after aggregation. A restart resumes processing without reprinting all past rows. The console shows at most 20 rows per batch and is intended for small demos, not durable serving. A finite or idle stream does not advance its watermark by wall-clock time. Add `--database /data/serving/quality-v2.sqlite` to persist snapshots and rule statuses; see [the serving-store instructions](docs/serving-store.md).
 
 ## Close a finite fixture run
 
@@ -184,7 +187,7 @@ Create the SQLite serving database with the [window writer](docs/serving-store.m
 docker compose up --build -d dashboard
 ```
 
-Open [localhost:8501](http://localhost:8501). This service publishes only to the local loopback address. It reads `/data/serving/quality.sqlite` through a read-only SQLite connection and a mount limited to the serving subdirectory; it does not start Kafka or Spark. Only the serving subdirectory is writable so SQLite can create WAL coordination sidecars; raw and clean history are not mounted into the dashboard. The application uses `mode=ro` and SELECT queries. The window writer must first create the serving directory, which the Docker volume subpath requires. If the directory exists but has no database or stored windows, the app displays a setup/no-data message rather than creating a database.
+Open [localhost:8501](http://localhost:8501). This service publishes only to the local loopback address. It reads `/data/serving/quality-v2.sqlite` through a read-only SQLite connection and a mount limited to the serving subdirectory; it does not start Kafka or Spark. Only the serving subdirectory is writable so SQLite can create WAL coordination sidecars; raw and clean history are not mounted into the dashboard. The application uses `mode=ro` and SELECT queries. The window writer must first create the serving directory, which the Docker volume subpath requires. If the directory exists but has no database or stored windows, the app displays a setup/no-data message rather than creating a database.
 
 Select a run, detector/category version, and line to see inspection/reject totals, a reject-rate trend, provisional/final window rows, and rule evaluations. Summaries use only the selected snapshots and detector version. Active rule results are shown separately from clear, resolved, or insufficient-data evaluations. Fixture model scores remain synthetic; there is no image inference or image viewer yet.
 
@@ -232,7 +235,7 @@ The first real bottle model is fitted and evaluated. See [the CPU baseline guide
 
 ## Next steps
 - Prepare capsule data/artifact and finish the deferred full recovery checks; bottle manifest execution and initial evaluation are recorded.
-- Add persisted simulated work-order/temperature/speed context and producer-status presentation.
+- Add producer-status presentation and complete mixed-category dashboard acceptance.
 - Finish the mixed-category live demo and measure full-pipeline recovery, throughput and visibility delays; initial historical reconciliation is checked.
 
 Checked on 6 November 2026 using Docker Engine 29.2.1 on WSL2 (Linux x86-64). The container reported Spark 4.0.2, Python 3.10.12, and Java 17.0.17.

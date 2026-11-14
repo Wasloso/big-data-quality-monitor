@@ -1,8 +1,11 @@
 """Keep valid, unique inspections from the raw Parquet stream."""
 
 import argparse
+from pathlib import Path
 
 from pyspark.sql import SparkSession, functions as F
+
+from quality_monitor.ingest import file_query_contract
 
 
 def clean_records(raw):
@@ -18,11 +21,15 @@ def clean_records(raw):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", default="/data/raw")
-    parser.add_argument("--output", default="/data/clean")
-    parser.add_argument("--checkpoint", default="/data/checkpoints/deduplicate")
+    parser.add_argument("--input", default="/data/v2/raw")
+    parser.add_argument("--output", default="/data/v2/clean")
+    parser.add_argument("--checkpoint", default="/data/v2/checkpoints/deduplicate")
     parser.add_argument("--once", action="store_true", help="Drain available archive files and exit")
     args = parser.parse_args()
+    file_query_contract(args.checkpoint, {
+        "query_version": "deduplicate-v2", "input": str(Path(args.input).resolve()),
+        "output": str(Path(args.output).resolve()), "lateness": "2 minutes", "shuffle_partitions": 2,
+    })
     spark = (
         SparkSession.builder.appName("inspection-deduplication")
         .config("spark.sql.session.timeZone", "UTC")

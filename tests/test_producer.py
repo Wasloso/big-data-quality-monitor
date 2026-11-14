@@ -69,7 +69,7 @@ class ProducerTests(unittest.TestCase):
                     "model_version": "test-model", "threshold_version": "test-threshold"}
         with TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             args = SimpleNamespace(run_id="station-test", station="A", scenario="test", category="bottle",
-                                   status=Path(directory) / "first.json", rate=100000, topic="inspections", max_items=3)
+                                   status=Path(directory) / "first.json", rate=100000, topic="inspections", max_items=3, work_order="WO-A", operation="inspection", temperature_c=35.0, conveyor_speed_m_min=12.0)
             calls = 0
 
             def score(relative):
@@ -88,6 +88,8 @@ class ProducerTests(unittest.TestCase):
             self.assertEqual(len({event["inspection_id"] for event in first}), 2)
             self.assertEqual(len({event["image_id"] for event in first}), 1)
             self.assertTrue(all(event["is_reject"] for event in first))
+            self.assertTrue(all(event["station_context"]["simulated"] is True for event in first))
+            self.assertEqual(first[0]["station_context"]["work_order"], "WO-A")
             for event in first:
                 self.assertLessEqual(before, datetime.fromisoformat(event["event_time"]))
                 self.assertLessEqual(datetime.fromisoformat(event["event_time"]), datetime.fromisoformat(event["published_at"]))
@@ -109,7 +111,7 @@ class ProducerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 read_image_list(root / "images.json", root, "bottle")
             args = SimpleNamespace(run_id="test", station="A", scenario="test", category="capsule",
-                                   status=root / "wrong.json", rate=1, topic="inspections", max_items=1)
+                                   status=root / "wrong.json", rate=1, topic="inspections", max_items=1, work_order="WO-A", operation="inspection", temperature_c=35.0, conveyor_speed_m_min=12.0)
             with self.assertRaises(ValueError):
                 run_station(args, FakeProducer(), lambda path: 0.1, metadata, ["capsule/a.png"], Event())
             self.assertFalse(args.status.exists())

@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 
-DATABASE = Path(os.environ.get("QUALITY_DATABASE", "/data/serving/quality.sqlite"))
+DATABASE = Path(os.environ.get("QUALITY_DATABASE", "/data/serving/quality-v2.sqlite"))
 st.set_page_config(page_title="Quality monitor", layout="wide")
 st.title("Production quality monitor")
 st.caption("Predicted rejects from stored inspection windows. Fixture models use synthetic scores.")
@@ -20,7 +20,7 @@ st.caption("Predicted rejects from stored inspection windows. Fixture models use
 def show_dashboard():
     st.button("Refresh")
     if not DATABASE.is_file():
-        st.info("No serving database yet. Start the window writer with --database /data/serving/quality.sqlite.")
+        st.info("No serving database yet. Start the window writer with --database /data/serving/quality-v2.sqlite.")
         return
     try:
         with closing(sqlite3.connect(DATABASE.resolve().as_uri() + "?mode=ro", timeout=5)) as connection:

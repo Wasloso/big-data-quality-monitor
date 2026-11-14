@@ -37,10 +37,27 @@ def read_image_list(path, root, category):
     return images
 
 
+def finite_setting(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("Use a finite number")
+    return number
+
+
+def simulated_context(args, number):
+    return {
+        "version": 1, "simulated": True, "work_order": args.work_order, "operation": args.operation,
+        "reported_state": "running",
+        "temperature_c": round(args.temperature_c + .8 * math.sin(number / 8), 2),
+        "conveyor_speed_m_min": round(max(0, args.conveyor_speed_m_min + .2 * math.sin(number / 5)), 2),
+    }
+
+
 def inspection(args, metadata, relative, session, number, acquired_at, score):
     identity = f"{args.run_id}:{args.station}:{session}:{number}"
     event = {
         "schema_version": 1, "record_kind": "inspection",
+        "station_context": simulated_context(args, number),
         "inspection_id": identity, "product_id": f"product:{identity}",
         "run_id": args.run_id, "scenario_id": args.scenario,
         "image_id": hashlib.sha256(relative.encode()).hexdigest(), "image_uri": relative,
@@ -68,6 +85,7 @@ def run_station(args, producer, score_image, metadata, images, stop):
         "run_id": args.run_id, "station": args.station, "session_id": session,
         "category": args.category, "model_version": metadata["model_version"],
         "threshold_version": metadata["threshold_version"], "threshold": metadata["threshold"],
+        "work_order": args.work_order, "operation": args.operation,
         "mode": "live-inference", "target_rate": args.rate, "state": "running",
         "started_at": utc_now(), "attempted": 0, "completed": 0, "queued": 0,
         "published": 0, "inference_errors": 0, "delivery_errors": 0, "enqueue_errors": 0,
@@ -155,13 +173,19 @@ def main():
     parser.add_argument("--images", type=Path, required=True, help="Label-free JSON category/image-path list")
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--rate", type=positive_rate, default=1.0)
+    parser.add_argument("--work-order", default="demo-work-order")
+    parser.add_argument("--operation", default="visual-inspection")
+    parser.add_argument("--temperature-c", type=finite_setting, default=35.0, help="Simulated nominal temperature, degrees Celsius")
+    parser.add_argument("--conveyor-speed-m-min", type=finite_setting, default=12.0, help="Simulated nominal speed, metres per minute")
     parser.add_argument("--status", type=Path, help="New status file; defaults to artifacts/stations/<station>-<session>.json")
     parser.add_argument("--max-items", type=int, help="Optional attempt limit for a finite integration smoke")
     args = parser.parse_args()
-    if any(not value.strip() for value in (args.station, args.category, args.run_id, args.scenario)):
+    if any(not value.strip() for value in (args.station, args.category, args.run_id, args.scenario, args.work_order, args.operation)):
         parser.error("Station, category, run ID and scenario must be nonempty")
     if Path(args.station).name != args.station or args.station in (".", ".."):
         parser.error("Station must be a single path-safe name")
+    if args.conveyor_speed_m_min < 0:
+        parser.error("Conveyor speed must be nonnegative")
     if args.max_items is not None and args.max_items < 1:
         parser.error("--max-items must be positive")
     try:

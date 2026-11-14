@@ -11,9 +11,9 @@ from quality_monitor.store import query_epoch
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", default="/data/clean")
-    parser.add_argument("--database", default="/data/serving/stations.sqlite")
-    parser.add_argument("--checkpoint", default="/data/checkpoints/inspection-serving-v1")
+    parser.add_argument("--input", default="/data/v2/clean")
+    parser.add_argument("--database", default="/data/serving/stations-v2.sqlite")
+    parser.add_argument("--checkpoint", default="/data/v2/checkpoints/inspection-serving-v2")
     parser.add_argument("--retention", type=int, default=1000, help="Recent samples retained per run/station")
     parser.add_argument("--max-batch-rows", type=int, default=1000)
     parser.add_argument("--once", action="store_true", help="Drain available clean files and exit")
@@ -22,7 +22,7 @@ def main():
         parser.error("Retention and batch limits must be positive")
     database = str(Path(args.database).resolve())
     epoch = query_epoch(args.checkpoint, {
-        "query_version": "inspection-serving-v1", "input": str(Path(args.input).resolve()),
+        "query_version": "inspection-serving-v2", "input": str(Path(args.input).resolve()),
         "database": database, "retention": args.retention, "max_batch_rows": args.max_batch_rows,
     }, tables=("inspection_samples", "station_latest"))
     spark = (
@@ -42,7 +42,7 @@ def main():
             rows = batch.limit(args.max_batch_rows + 1).collect()
             if len(rows) > args.max_batch_rows:
                 raise RuntimeError(f"Inspection batch exceeds --max-batch-rows={args.max_batch_rows}")
-            write_inspections(database, [row.asDict() for row in rows], epoch, batch_id, retention=args.retention)
+            write_inspections(database, [row.asDict(recursive=True) for row in rows], epoch, batch_id, retention=args.retention)
 
         writer = inspections.writeStream.foreachBatch(save).outputMode("append").option(
             "checkpointLocation", args.checkpoint,

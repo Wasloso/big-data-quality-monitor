@@ -1,6 +1,6 @@
 # Inspection events, version 1
 
-One JSON object per line. `quality_monitor.events.parse_event` decodes and validates it; invalid input raises `ValueError`. Version 1 supports inspections and explicit progress controls.
+One JSON object per line. `quality_monitor.events.parse_event` decodes and validates it; invalid input raises `ValueError`. Version 1 supports inspections and explicit progress controls. Inspections can optionally contain a versioned simulated `station_context`; legacy events without it remain valid.
 
 | Field | Type and meaning |
 | --- | --- |
@@ -59,4 +59,9 @@ The producer checks delivery callbacks and flushes pending messages before repor
 
 ## Actual image stations
 
-The separate [continuous station CLI](continuous-stations.md) publishes this same schema with real model predictions. It sets `event_time` at actual UTC acquisition and `published_at` after inference, before enqueue. Every acquisition/restart has a fresh inspection/product identity, while a repeated relative source path retains its image ID. The configured category must match the image list and fitted model; ground truth and saved scores are not read by the online loop. Ctrl+C drains queued deliveries and emits no closure controls. Simulated machine context remains a future versioned parsed-schema extension.
+The separate [continuous station CLI](continuous-stations.md) publishes this same schema with real model predictions. It sets `event_time` at actual UTC acquisition and `published_at` after inference, before enqueue. Every acquisition/restart has a fresh inspection/product identity, while a repeated relative source path retains its image ID. The configured category must match the image list and fitted model; ground truth and saved scores are not read by the online loop. Ctrl+C drains queued deliveries and emits no closure controls. Successful station inspections now carry the optional simulated context described below.
+
+
+## Optional station context, version 1
+
+`station_context` is null/absent for legacy inspections and all progress controls. Otherwise it is an object with integer `version: 1`, literal boolean `simulated: true`, nonempty `work_order` and `operation`, `reported_state` (`running`, `idle`, `maintenance`), finite numeric `temperature_c`, and finite nonnegative `conveyor_speed_m_min`. Booleans and strings are not numeric readings. The current station emits `running` on acquisition; no independent heartbeat or stopped observation is synthesized. See [context and runtime versioning](station-context.md) for new state paths and the explicit Spark/SQLite representation.

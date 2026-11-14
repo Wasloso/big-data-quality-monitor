@@ -38,6 +38,12 @@ class ApiChecks(unittest.TestCase):
                 data = client.get("/api/overview", params=params).json()
                 self.assertEqual(sum(row["inspections"] for row in data["stations"]), 120)
                 self.assertEqual(sum(row["rejects"] for row in data["stations"]), 18)
+                broken_projection = Path(directory) / "broken.sqlite"
+                broken_projection.touch()
+                with patch("quality_monitor.api.STATIONS_DATABASE", broken_projection):
+                    partial = client.get("/api/overview", params=params).json()
+                    self.assertEqual(partial["observation_state"], "unavailable")
+                    self.assertEqual(sum(row["inspections"] for row in partial["stations"]), 120)
                 self.assertEqual(sorted(row["status"] for row in data["alerts"]), ["active", "clear"])
                 selected = client.get("/api/overview", params={**params, "line_id": "B"}).json()
                 self.assertEqual(selected["stations"][0]["rejects"], 12)
@@ -61,13 +67,25 @@ class ApiChecks(unittest.TestCase):
             with patch("quality_monitor.api.STATIONS_DATABASE", database), TestClient(app) as client:
                 self.assertEqual(client.get("/api/inspections", params=params).json()["state"], "missing")
                 self.assertFalse(database.exists())
+                context = {"version": 1, "simulated": True, "work_order": "WO-A", "operation": "inspection",
+                           "reported_state": "running", "temperature_c": 35.5, "conveyor_speed_m_min": 12.0}
                 rows = [{**base, "inspection_id": f"item-{index}"} for index in range(4)]
+                rows[-1]["station_context"] = context
                 write_inspections(database, [*rows, {**base, "inspection_id": "capsule-1", "category": "capsule"},
                                             {**base, "inspection_id": "other-run", "run_id": "other"}], "epoch", 0)
                 first = client.get("/api/inspections", params={**params, "limit": 2}).json()
                 self.assertEqual(first["retained_count"], 4)
                 self.assertEqual([row["inspection_id"] for row in first["inspections"]], ["item-3", "item-2"])
                 self.assertIs(first["inspections"][0]["is_reject"], True)
+                self.assertEqual(first["inspections"][0]["station_context"], context)
+                self.assertEqual(first["latest_inspection"]["station_context"], context)
+                from quality_monitor.api import station_observations
+                observed, state, batch_at = station_observations(base["run_id"], base["category"], base["model_version"], base["threshold_version"])
+                self.assertEqual(state, "ready")
+                self.assertIsNotNone(batch_at)
+                self.assertEqual(observed["A"]["station_context"], context)
+                self.assertEqual(station_observations("other-selection", base["category"], base["model_version"], base["threshold_version"])[0], {})
+                self.assertIsNone(first["inspections"][1]["station_context"])
                 self.assertEqual(first["latest_inspection"]["inspection_id"], "item-3")
                 second = client.get("/api/inspections", params={**params, "limit": 2, **first["next_cursor"]}).json()
                 self.assertEqual([row["inspection_id"] for row in second["inspections"]], ["item-1", "item-0"])
