@@ -9,6 +9,8 @@ from pyspark.sql import SparkSession, functions as F
 
 from quality_monitor.deduplicate import clean_records
 from quality_monitor.ingest import archive_records
+from quality_monitor.history import compare_windows, reconcile, served_windows, window_record
+from quality_monitor.store import query_epoch, sqlite_sink
 from quality_monitor.sample import progress_events, sample_events
 from quality_monitor.windows import quality_windows
 
@@ -29,6 +31,13 @@ def main():
     events = list(sample_events())
     expected = json.loads(Path("/app/tests/fixtures/expected_counts.json").read_text())
     evidence = {"spark_version": spark.version, "path": str(root)}
+    database = root / "serving" / "quality.sqlite"
+    contract = {
+        "query_version": 2, "input": str(root / "clean"), "database": str(database),
+        "window": "1 minute", "lateness": "2 minutes", "final": True,
+        "threshold": 0.15, "minimum": 30, "shuffle_partitions": 2,
+    }
+    epoch = query_epoch(root / "q3", contract)
 
     def archive(payloads):
         nonlocal offset
@@ -49,7 +58,7 @@ def main():
         windows.processAllAvailable()
 
     def finalized():
-        return spark.read.parquet(str(root / "final")).collect()
+        return served_windows(database, "fixture-001", 1000) if database.is_file() else []
 
     try:
         # Hold two rejects back until the watermark is within their minute.
@@ -68,8 +77,9 @@ def main():
         dedup.processAllAvailable()
         clean = spark.readStream.schema(spark.read.parquet(str(root / "clean")).schema).parquet(str(root / "clean"))
         windows = (
-            quality_windows(clean).writeStream.format("parquet").outputMode("append")
-            .option("path", str(root / "final"))
+            quality_windows(clean).writeStream.foreachBatch(
+                sqlite_sink(str(database), epoch, final=True),
+            ).outputMode("append")
             .option("checkpointLocation", str(root / "q3"))
             .start()
         )
@@ -92,31 +102,42 @@ def main():
         drain()
         rows = finalized()
         counts = {
-            row.line_id: {"inspections": row.inspections, "rejects": row.rejects, "reject_rate": row.reject_rate}
+            row["line_id"]: {name: row[name] for name in ("inspections", "rejects", "reject_rate")}
             for row in rows
         }
         assert len(rows) == 2 and counts == expected, (rows, counts)
         for row in rows:
-            assert row.start.isoformat() == "2026-11-07T12:00:00"
-            assert row.end.isoformat() == "2026-11-07T12:01:00"
-            assert (row.run_id, row.category, row.model_version, row.threshold_version) == (
+            assert row["start"] == "2026-11-07T12:00:00+00:00"
+            assert row["end"] == "2026-11-07T12:01:00+00:00"
+            assert tuple(row[name] for name in ("run_id", "category", "model_version", "threshold_version")) == (
                 "fixture-001", "bottle", "fixture-v1", "fixture-0.5",
             )
         # A distinct inspection older than both watermarks cannot revise a closed window.
         beyond = {**events[40], "inspection_id": "beyond-watermark", "product_id": "late-product"}
         publish([beyond])
         drain()
-        assert set(finalized()) == set(rows), "Late input changed finalized results"
+        assert finalized() == rows, "Late input changed finalized results"
         history = spark.read.parquet(str(root / "raw"))
         assert history.filter("NOT is_valid").count() == 2
         clean_history = spark.read.parquet(str(root / "clean"))
         assert clean_history.filter("record_kind = 'progress'").count() == 4
         assert not clean_history.groupBy("run_id", "inspection_id").count().filter("count > 1").count()
+        report = reconcile(spark, root / "clean", root / "raw", database, "fixture-001", expected=expected)
+        assert report["result"] == "passed", report
+        assert report["raw_archive_global"]["invalid_rows"] == 2
+        assert report["raw_run"]["repeated_inspection_rows"] == 10
+        assert report["raw_run"]["unique_raw_ids_absent_from_clean"] == 1
+        # Ensure the comparison detects an incorrect served count, not just matching row numbers.
+        changed = [window_record(row) for row in rows]
+        changed[0] = {**changed[0], "rejects": changed[0]["rejects"] + 1}
+        assert compare_windows(report["historical_windows"], changed)
+        (root / "history.json").write_text(json.dumps(report, indent=2) + "\n")
         evidence.update({
             "final_counts": counts, "within_allowance_accepted": len(delayed),
             "beyond_allowance_clean_rows": clean_history.filter(F.col("inspection_id") == "beyond-watermark").count(),
             "invalid_raw_rows": 2, "duplicate_injections": 10, "controls_in_clean": 4,
-            "final_windows": len(rows), "result": "passed",
+            "final_windows": len(rows), "historical_reconciliation": report["result"],
+            "history_report": str(root / "history.json"), "result": "passed",
         })
         (root / "result.json").write_text(json.dumps(evidence, indent=2) + "\n")
         print(json.dumps(evidence, indent=2))

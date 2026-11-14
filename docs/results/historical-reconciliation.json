@@ -1,0 +1,103 @@
+{
+  "recorded_date": "2026-11-14",
+  "scenario": "Controlled isolated fixture, Kafka-shaped input without a broker",
+  "runtime": {
+    "spark_version": "4.0.2",
+    "master": "local[2]",
+    "shuffle_partitions": 2
+  },
+  "pipeline_result": {
+    "spark_version": "4.0.2",
+    "path": "/data/c06-check-0eb89407d614489bb5155c47b886b13d",
+    "watermark_before_delayed_inspections": "2026-11-07T12:00:30.000Z",
+    "final_counts": {
+      "A": {
+        "inspections": 60,
+        "rejects": 6,
+        "reject_rate": 0.1
+      },
+      "B": {
+        "inspections": 60,
+        "rejects": 12,
+        "reject_rate": 0.2
+      }
+    },
+    "within_allowance_accepted": 2,
+    "beyond_allowance_clean_rows": 0,
+    "invalid_raw_rows": 2,
+    "duplicate_injections": 10,
+    "controls_in_clean": 4,
+    "final_windows": 2,
+    "historical_reconciliation": "passed",
+    "history_report": "/data/c06-check-0eb89407d614489bb5155c47b886b13d/history.json",
+    "result": "passed"
+  },
+  "standalone_report": {
+    "run_id": "fixture-001",
+    "window": "1 minute",
+    "query_epoch": "f47d2e3621d34073a8454a342d70048a",
+    "query_contract": {
+      "database": "/data/c06-check-0eb89407d614489bb5155c47b886b13d/serving/quality.sqlite",
+      "final": true,
+      "input": "/data/c06-check-0eb89407d614489bb5155c47b886b13d/clean",
+      "lateness": "2 minutes",
+      "minimum": 30,
+      "query_version": 2,
+      "shuffle_partitions": 2,
+      "threshold": 0.15,
+      "window": "1 minute"
+    },
+    "raw_archive_global": {
+      "rows": 137,
+      "invalid_rows": 2,
+      "invalid_without_run_id": 1
+    },
+    "raw_run": {
+      "invalid_rows_with_this_run_id": 1,
+      "valid_inspection_rows": 131,
+      "unique_inspection_ids": 121,
+      "repeated_inspection_rows": 10,
+      "unique_raw_ids_absent_from_clean": 1
+    },
+    "clean_run": {
+      "rows": 124,
+      "inspections": 120,
+      "controls": 4,
+      "repeated_id_rows": 0,
+      "unique_clean_inspections_absent_from_raw": 0
+    },
+    "station_totals": {
+      "A": {
+        "inspections": 60,
+        "rejects": 6,
+        "reject_rate": 0.1
+      },
+      "B": {
+        "inspections": 60,
+        "rejects": 12,
+        "reject_rate": 0.2
+      }
+    },
+    "serving_windows": 2,
+    "provisional_serving_windows": 0,
+    "window_mismatches": [],
+    "oracle_supplied": true,
+    "oracle_matches": true,
+    "result": "passed"
+  },
+  "checks": {
+    "fast_unit_checks_passed": 12,
+    "new_default_tests": 0,
+    "spark_image_build": "passed",
+    "changed_serving_count_detected": true,
+    "provisional_checkpoint_rejected_exit_code": 2
+  },
+  "limitations": [
+    "Raw archive global counts include other runs; malformed records without a run ID cannot be attributed to this run.",
+    "Absent raw IDs are exclusions to investigate, not automatically classified as late or invalid.",
+    "Static history does not replay arrival order or reconstruct watermark decisions. Reconciliation requires a drained, supported closed-run scenario.",
+    "Matching counts without an independent oracle do not prove source completeness or correct labels.",
+    "Small controlled correctness scenario; no Kafka transport, history-volume, recovery or capacity benchmark is claimed.",
+    "Full raw/clean data, databases, checkpoints and reports remain in ignored runtime storage."
+  ]
+}

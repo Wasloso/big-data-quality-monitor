@@ -8,7 +8,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 Kafka, Spark validation/deduplication/windowing, Parquet history and SQLite serving views are implemented. FastAPI and React show quality windows, alerts and bounded recent inspections with an optional local image mount. The finite synthetic fixture remains a separate correctness/replay mode.
 
-The original MVTec bottle data is prepared and a CPU PatchCore artifact has been fitted and evaluated with a frozen normal-validation threshold. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Capsule, simulated machine context, producer-status presentation, historical reconciliation and full recovery/capacity experiments remain incomplete.
+The original MVTec bottle data is prepared and a CPU PatchCore artifact has been fitted and evaluated with a frozen normal-validation threshold. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Capsule, simulated machine context, producer-status presentation and full recovery/capacity experiments remain incomplete. Historical Spark reconciliation is checked against finalized SQLite windows and an independent fixture oracle.
 
 ## Roadmap
 
@@ -22,7 +22,7 @@ The original MVTec bottle data is prepared and a CPU PatchCore artifact has been
 - [x] Store raw inspection history in Parquet with persistent ingestion checkpoints.
 - [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; full pipeline/recovery verification pending).
 - [x] Implement local MVTec manifests and verify bottle preparation/integrity (168 fit / 41 validation / 83 test; capsule preparation pending).
-- [ ] Add historical queries and reconciliation.
+- [x] Add bounded historical Spark queries and reconcile closed fixture windows with SQLite and an independent oracle (C12).
 - [x] Fit and evaluate the first CPU PatchCore bottle artifact using a normal-validation threshold (capsule pending).
 - [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.
 - [x] Add a bounded read-only FastAPI view of existing quality results (UI1).
@@ -56,7 +56,7 @@ This sends the first inspection immediately and schedules subsequent inspections
 
 `published_at` is set from the wall clock after any pacing wait, before each message is enqueued. `event_time` keeps the synthetic fixture time; pacing does not change event-time windows. Image paths and predictions remain placeholders. This is a finite replay without image inference. Publication acknowledgement does not measure aggregate or dashboard latency.
 
-Kafka is available only inside the Compose network at `kafka:19092`; no host port is published. Broker data is kept in the `kafka-data` volume across `docker compose down` / restart. To stop services while keeping history:
+Default Compose exposes Kafka only inside its network at `kafka:19092`; the optional `compose.local-kafka.yaml` adds the loopback listener described in [the station guide](docs/continuous-stations.md). Broker data is kept in the `kafka-data` volume across `docker compose down` / restart. To stop services while keeping history:
 
 ```bash
 docker compose down
@@ -160,9 +160,13 @@ Run the explicitly invoked integration scenario (separate from unit tests):
 docker compose run --build --rm --no-deps --entrypoint /opt/spark/bin/spark-submit spark-windows --master 'local[2]' --conf spark.ui.enabled=false /app/scripts/check_pipeline.py
 ```
 
-It uses the real Q1 validation transformation on Kafka-shaped rows, then separate Q2/Q3 file streams with persistent checkpoints. It requires no broker and does not test Kafka transport or crash recovery. Each invocation retains artifacts and `result.json` in a new `/data/c06-check-<id>` directory in `archive-data`.
+It uses the real Q1 validation transformation on Kafka-shaped rows, then separate Q2/Q3 file streams with persistent checkpoints. It requires no broker and does not test Kafka transport or crash recovery. It now writes finalized windows through the SQLite sink and compares independent historical Spark aggregates with the serving results and fixture oracle. Each invocation retains artifacts and `result.json` in a new `/data/c06-check-<id>` directory in `archive-data`.
 
 The scenario injects ten duplicates and two invalid payloads, holds back two reject inspections, advances event time to `12:02:30Z`, then supplies those inspections at `12:00:40Z` within the allowance. Controls at `12:04Z` finalize the fixture minute. It compares the two final rows with the separate fixture oracle, checks window boundaries/group metadata and exclusion of control-only windows, then injects an older distinct inspection and verifies that closed results stay unchanged. It records whether that inspection survived Q2; it does not assume all beyond-watermark arrivals are dropped under every batching arrangement.
+
+## Historical queries
+
+See [the historical-analysis guide](docs/historical-analysis.md) for the standalone command, actual finalized-run reconciliation and accounting for invalid, duplicate, control and excluded IDs. The report uses bounded aggregate results and keeps provisional runs distinct from closed-run evidence.
 
 ## Project individual inspection history
 
@@ -229,7 +233,7 @@ The first real bottle model is fitted and evaluated. See [the CPU baseline guide
 ## Next steps
 - Prepare capsule data/artifact and finish the deferred full recovery checks; bottle manifest execution and initial evaluation are recorded.
 - Add persisted simulated work-order/temperature/speed context and producer-status presentation.
-- Reconcile historical Spark results and measure full-pipeline recovery, throughput and visibility delays.
+- Finish the mixed-category live demo and measure full-pipeline recovery, throughput and visibility delays; initial historical reconciliation is checked.
 
 Checked on 6 November 2026 using Docker Engine 29.2.1 on WSL2 (Linux x86-64). The container reported Spark 4.0.2, Python 3.10.12, and Java 17.0.17.
 
