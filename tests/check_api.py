@@ -1,10 +1,11 @@
 """Opt-in API checks: run with the API dependencies and httpx installed."""
 
+import json
 import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -40,6 +41,10 @@ class ApiChecks(unittest.TestCase):
                 self.assertEqual(sum(row["rejects"] for row in data["stations"]), 18)
                 broken_projection = Path(directory) / "broken.sqlite"
                 broken_projection.touch()
+                with patch("quality_monitor.api.STATUS_ROOT", broken_projection):
+                    discovered = client.get("/api/runs").json()
+                    self.assertEqual(discovered["producer_status_state"], "unavailable")
+                    self.assertEqual(len(discovered["runs"]), 3)
                 with patch("quality_monitor.api.STATIONS_DATABASE", broken_projection):
                     partial = client.get("/api/overview", params=params).json()
                     self.assertEqual(partial["observation_state"], "unavailable")
@@ -138,3 +143,61 @@ class ApiChecks(unittest.TestCase):
             with patch("quality_monitor.api.DATABASE", database), TestClient(app) as client:
                 self.assertEqual(client.get("/api/overview", params=params).status_code, 413)
                 self.assertEqual(client.get("/api/overview", params={**params, "line_id": "0"}).status_code, 200)
+
+
+    def test_producer_status_is_scoped_bounded_and_available_before_windows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "status"
+            root.mkdir()
+            now = datetime.now(timezone.utc)
+            base = {
+                "schema_version": 1, "run_id": "status-run", "station": "A", "session_id": "old-active",
+                "category": "bottle", "model_version": "model", "threshold_version": "threshold", "threshold": 1.5,
+                "state": "running", "target_rate": 2, "started_at": (now - timedelta(seconds=300)).isoformat(),
+                "updated_at": (now - timedelta(seconds=1)).isoformat(),
+                "attempted": 2, "completed": 2, "queued": 2, "published": 2, "inference_errors": 0,
+                "enqueue_errors": 0, "delivery_errors": 0, "pending": 0, "last_error": None,
+            }
+            (root / "old.json").write_text(json.dumps(base))
+            newer = {**base, "session_id": "new-ended", "state": "stopped",
+                     "started_at": (now - timedelta(seconds=120)).isoformat(),
+                     "updated_at": (now - timedelta(seconds=60)).isoformat(),
+                     "stopped_at": (now - timedelta(seconds=60)).isoformat()}
+            (root / "new.json").write_text(json.dumps(newer))
+            slow = {**base, "station": "B", "session_id": "slow", "target_rate": .01,
+                    "updated_at": (now - timedelta(seconds=100)).isoformat()}
+            (root / "slow.json").write_text(json.dumps(slow))
+            stale = {**slow, "station": "C", "session_id": "stale", "target_rate": 2}
+            (root / "stale.json").write_text(json.dumps(stale))
+            before = (root / "old.json").read_bytes()
+            database = Path(directory) / "missing.sqlite"
+            params = {name: base[name] for name in ("run_id", "category", "model_version", "threshold_version")}
+            with patch("quality_monitor.api.STATUS_ROOT", root), patch("quality_monitor.api.DATABASE", database), TestClient(app) as client:
+                response = client.get("/api/producer-status", params=params)
+                self.assertEqual(response.status_code, 200)
+                data = response.json()
+                self.assertEqual(data["state"], "ready")
+                sessions = {row["session_id"]: row for row in data["sessions"]}
+                self.assertTrue(sessions["new-ended"]["latest_started_session"])
+                self.assertFalse(sessions["old-active"]["latest_started_session"])
+                self.assertEqual(sessions["slow"]["freshness"], "recent")
+                self.assertEqual(sessions["stale"]["freshness"], "stale")
+                self.assertEqual(len(client.get("/api/producer-status", params={**params, "line_id": "A"}).json()["sessions"]), 2)
+                self.assertEqual(client.get("/api/producer-status", params={**params, "run_id": "other"}).json()["sessions"], [])
+                listing = client.get("/api/runs").json()
+                self.assertEqual(listing["state"], "ready")
+                self.assertEqual(listing["runs"][0]["run_id"], base["run_id"])
+                self.assertEqual(client.get("/api/overview", params=params).json()["windows"], [])
+                self.assertFalse(database.exists())
+                self.assertEqual((root / "old.json").read_bytes(), before)
+                (root / "bad.json").write_text(json.dumps({**base, "published": True}))
+                outside = Path(directory) / "outside.json"
+                outside.write_text(json.dumps(base))
+                (root / "escape.json").symlink_to(outside)
+                partial = client.get("/api/producer-status", params=params).json()
+                self.assertEqual(partial["state"], "partial")
+                self.assertEqual(partial["invalid_files"], 2)
+                with patch("quality_monitor.producer_status.MAX_FILES", 1):
+                    self.assertEqual(client.get("/api/producer-status", params=params).status_code, 413)
+                with patch("quality_monitor.api.STATUS_ROOT", None):
+                    self.assertEqual(client.get("/api/producer-status", params=params).json()["state"], "disabled")

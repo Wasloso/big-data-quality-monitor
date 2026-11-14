@@ -1,0 +1,67 @@
+{
+  "recorded_date": "2026-11-14",
+  "run_id": "producer-status-4d98c6ac82",
+  "producer_sessions": [
+    {
+      "station": "A",
+      "session_id": "bdf5af39c6bc46fd8423f3e4c95f107d",
+      "state": "stopped",
+      "freshness": "ended",
+      "latest_started_session": true,
+      "attempted": 2,
+      "completed": 2,
+      "queued": 2,
+      "published": 2,
+      "inference_errors": 0,
+      "enqueue_errors": 0,
+      "delivery_errors": 0,
+      "pending": 0
+    },
+    {
+      "station": "A",
+      "session_id": "1266406763b44eda8888215407f91ccc",
+      "state": "stopped",
+      "freshness": "ended",
+      "latest_started_session": false,
+      "attempted": 18,
+      "completed": 18,
+      "queued": 18,
+      "published": 18,
+      "inference_errors": 0,
+      "enqueue_errors": 0,
+      "delivery_errors": 0,
+      "pending": 0
+    },
+    {
+      "station": "B",
+      "session_id": "3e88cd1fa42a48c4b74c74c6a794e18b",
+      "state": "stopped",
+      "freshness": "ended",
+      "latest_started_session": true,
+      "attempted": 4,
+      "completed": 2,
+      "queued": 2,
+      "published": 2,
+      "inference_errors": 2,
+      "enqueue_errors": 0,
+      "delivery_errors": 0,
+      "pending": 0
+    }
+  ],
+  "kafka_unique_inspections": 22,
+  "discovered_before_quality_windows": true,
+  "no_predictions_for_failed_images": true,
+  "checks": {
+    "fast_tests": 12,
+    "opt_in_api_checks": 5,
+    "new_default_methods": 0,
+    "new_opt_in_methods": 1,
+    "optional_compose_validation": "passed"
+  },
+  "limits": [
+    "Producer acknowledgements and errors describe sessions, not Spark-processed quality windows.",
+    "Both processes used the bottle artifact; repeated source images do not add independent evaluation samples.",
+    "No Spark processor interruption, capacity or latency measurement was performed.",
+    "The bad image was created in this run's ignored data copy; the original dataset was unchanged."
+  ]
+}

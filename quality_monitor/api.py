@@ -13,12 +13,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from quality_monitor.events import validate_station_context
+from quality_monitor.producer_status import read_statuses
 
 
 app = FastAPI(title="Quality monitor API")
 DATABASE = Path(os.environ.get("QUALITY_DATABASE", "/data/serving/quality-v2.sqlite"))
 STATIONS_DATABASE = Path(os.environ.get("STATIONS_DATABASE", "/data/serving/stations-v2.sqlite"))
 IMAGE_ROOT = Path(os.environ["INSPECTION_IMAGE_ROOT"]) if os.environ.get("INSPECTION_IMAGE_ROOT") else None
+
+STATUS_ROOT = Path(os.environ["PRODUCER_STATUS_ROOT"]) if os.environ.get("PRODUCER_STATUS_ROOT") else None
 
 
 @contextmanager
@@ -36,6 +39,27 @@ def snapshot(database=None):
         raise HTTPException(503, "Serving database is unavailable or not initialized") from error
 
 
+def status_snapshot(filters=None):
+    try:
+        return read_statuses(STATUS_ROOT, filters)
+    except OverflowError as error:
+        raise HTTPException(413, str(error)) from error
+    except OSError as error:
+        raise HTTPException(503, "Producer-status storage is unavailable") from error
+
+
+@app.get("/api/producer-status")
+def producer_status(
+    run_id: str = Query(min_length=1, max_length=200),
+    category: str = Query(min_length=1, max_length=200),
+    model_version: str = Query(min_length=1, max_length=200),
+    threshold_version: str = Query(min_length=1, max_length=200),
+    line_id: str | None = Query(default=None, min_length=1, max_length=200),
+):
+    return status_snapshot({"run_id": run_id, "category": category, "model_version": model_version,
+                            "threshold_version": threshold_version, "station": line_id})
+
+
 @app.get("/api/runs")
 def runs():
     with snapshot() as connection:
@@ -44,9 +68,21 @@ def runs():
             FROM windows GROUP BY run_id, category, model_version, threshold_version
             ORDER BY updated_at DESC, run_id LIMIT 101
         """).fetchall()
+    contexts = {tuple(row[name] for name in ("run_id", "category", "model_version", "threshold_version")): dict(row) for row in rows}
+    try:
+        status = status_snapshot()
+    except HTTPException:
+        status = {"state": "unavailable", "sessions": []}
+    for session in status["sessions"]:
+        key = tuple(session[name] for name in ("run_id", "category", "model_version", "threshold_version"))
+        current = contexts.get(key)
+        if current is None or session["updated_at"] > current["updated_at"]:
+            contexts[key] = {name: session[name] for name in ("run_id", "category", "model_version", "threshold_version", "updated_at")}
+    listed = sorted(contexts.values(), key=lambda row: (row["updated_at"], row["run_id"]), reverse=True)
     return {
-        "state": "missing" if connection is None else "ready" if rows else "empty",
-        "runs": [dict(row) for row in rows[:100]], "truncated": len(rows) > 100,
+        "state": "ready" if listed else "missing" if connection is None else "empty",
+        "runs": listed[:100], "truncated": len(listed) > 100,
+        "producer_status_state": status["state"],
     }
 
 

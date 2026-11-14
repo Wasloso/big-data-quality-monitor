@@ -81,13 +81,15 @@ def run_station(args, producer, score_image, metadata, images, stop):
     session = uuid4().hex
     path = args.status or Path(f"artifacts/stations/{args.station}-{session}.json")
     path.parent.mkdir(parents=True, exist_ok=True)
+    started_at = utc_now()
     status = {
+        "schema_version": 1, "updated_at": started_at,
         "run_id": args.run_id, "station": args.station, "session_id": session,
         "category": args.category, "model_version": metadata["model_version"],
         "threshold_version": metadata["threshold_version"], "threshold": metadata["threshold"],
         "work_order": args.work_order, "operation": args.operation,
         "mode": "live-inference", "target_rate": args.rate, "state": "running",
-        "started_at": utc_now(), "attempted": 0, "completed": 0, "queued": 0,
+        "started_at": started_at, "attempted": 0, "completed": 0, "queued": 0,
         "published": 0, "inference_errors": 0, "delivery_errors": 0, "enqueue_errors": 0,
         "pending": 0, "last_error": None,
     }

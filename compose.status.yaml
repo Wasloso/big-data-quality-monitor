@@ -1,0 +1,12 @@
+# Optional read-only status snapshots from station processes in the host environment.
+services:
+  api:
+    environment:
+      PRODUCER_STATUS_ROOT: /data/producer-status
+    volumes:
+      - type: bind
+        source: ${PRODUCER_STATUS_DIR:?Set PRODUCER_STATUS_DIR to an existing absolute station-status directory}
+        target: /data/producer-status
+        read_only: true
+        bind:
+          create_host_path: false
