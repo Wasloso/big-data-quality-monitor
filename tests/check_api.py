@@ -72,11 +72,40 @@ class ApiChecks(unittest.TestCase):
                 second = client.get("/api/inspections", params={**params, "limit": 2, **first["next_cursor"]}).json()
                 self.assertEqual([row["inspection_id"] for row in second["inspections"]], ["item-1", "item-0"])
                 self.assertIsNone(second["next_cursor"])
+                self.assertEqual(client.get("/api/inspections", params={**params, "to_time": base["event_time"]}).json()["state"], "empty")
+                self.assertEqual(client.get("/api/inspections", params={**params, "from_time": base["event_time"]}).json()["retained_count"], 4)
+                self.assertEqual(client.get("/api/inspections", params={**params, "from_time": base["event_time"], "to_time": base["event_time"]}).status_code, 422)
                 self.assertEqual(client.get("/api/inspections", params={**params, "category": "capsule"}).json()["retained_count"], 1)
                 self.assertEqual(client.get("/api/inspections", params={**params, "line_id": "B"}).json()["state"], "empty")
                 self.assertEqual(client.get("/api/inspections", params={**params, "limit": 101}).status_code, 422)
                 self.assertEqual(client.get("/api/inspections", params={**params, "before_id": "item-2"}).status_code, 422)
                 self.assertEqual(client.get("/api/inspections", params={**params, "before_id": "item-2", "before_time": "2026-11-07T12:00:00"}).status_code, 422)
+
+    def test_images_are_resolved_from_retained_records_inside_the_configured_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "images"
+            root.mkdir()
+            database = Path(directory) / "stations.sqlite"
+            image = b"\x89PNG\r\n\x1a\n"
+            (root / "sample.png").write_bytes(image)
+            (Path(directory) / "outside.png").write_bytes(image)
+            (root / "escape.png").symlink_to(Path(directory) / "outside.png")
+            (root / "note.txt").write_text("not an image")
+            base = next(iter(sample_events()))
+            paths = ["sample.png", "../outside.png", str(Path(directory) / "outside.png"),
+                     "escape.png", "note.txt", "missing.png"]
+            write_inspections(database, [{**base, "inspection_id": str(i), "image_uri": path}
+                                        for i, path in enumerate(paths)], "epoch", 0)
+            with patch("quality_monitor.api.STATIONS_DATABASE", database), patch("quality_monitor.api.IMAGE_ROOT", root), TestClient(app) as client:
+                response = client.get("/api/inspection-image", params={"run_id": base["run_id"], "inspection_id": "0"})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers["content-type"], "image/png")
+                self.assertEqual(response.content, image)
+                for identity in ("1", "2", "3", "4", "5", "unknown"):
+                    self.assertEqual(client.get("/api/inspection-image", params={"run_id": base["run_id"], "inspection_id": identity}).status_code, 404)
+                self.assertEqual(client.get("/api/inspection-image", params={"run_id": "another-run", "inspection_id": "0"}).status_code, 404)
+                with patch("quality_monitor.api.IMAGE_ROOT", None):
+                    self.assertEqual(client.get("/api/inspection-image", params={"run_id": base["run_id"], "inspection_id": "0"}).status_code, 503)
 
     def test_oversized_selection_fails_instead_of_returning_partial_totals(self):
         with tempfile.TemporaryDirectory() as directory:

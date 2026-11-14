@@ -1,0 +1,12 @@
+# Optional local image root. Merge with compose.yaml; do not mount the full archive.
+services:
+  api:
+    environment:
+      INSPECTION_IMAGE_ROOT: /data/images
+    volumes:
+      - type: bind
+        source: ${INSPECTION_IMAGE_DIR:?Set INSPECTION_IMAGE_DIR to an existing absolute image-root directory}
+        target: /data/images
+        read_only: true
+        bind:
+          create_host_path: false
