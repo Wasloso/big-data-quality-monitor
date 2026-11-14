@@ -57,7 +57,7 @@ Optional `from_time` and `to_time` on `/api/inspections` select individual items
 
 Open a station to see its retained item list, independently refreshed every five seconds. Select **View** to inspect one record; use **Older items** and **Latest items** to move between bounded 50-item pages. Run/station/detector and the UTC date filters apply to this list. Controls support seconds without treating browser-local time as acquisition time. The page keeps quality-window totals separate from retained sample counts.
 
-Configure the [optional local image mount](inspection-images.md) to show photos. Without a configured root, the panel says image storage is not connected. A missing/unreadable image displays an unavailable state; manual Refresh can retry it. The fixture model remains labeled synthetic. Inspecting an image does not turn its score into a confirmed defect or probability. Numeric detector threshold values and maps require the future model artifacts; the current panel displays their version identifiers.
+Configure the [optional local image mount](inspection-images.md) to show photos. Without a configured root, the panel says image storage is not connected. A missing/unreadable image displays an unavailable state; manual Refresh can retry it. The fixture model remains labeled synthetic. Inspecting an image does not turn its score into a confirmed defect or probability. Numeric detector thresholds are available in matching producer-session reports when enabled; the selected-image panel still displays version identifiers. Anomaly-map evidence remains pending.
 
 
 ## Persisted simulated observations
