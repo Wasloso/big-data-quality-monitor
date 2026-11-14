@@ -1,0 +1,105 @@
+{
+  "recorded_date": "2026-11-14",
+  "dataset_preparation": "bottle-data-preparation.json",
+  "fit": {
+    "category": "bottle",
+    "config": {
+      "backbone": "resnet18.tv_in1k",
+      "batch_size": 8,
+      "coreset_ratio": 0.01,
+      "image_size": 128,
+      "layers": [
+        "layer2",
+        "layer3"
+      ],
+      "neighbors": 9,
+      "normal_quantile": 0.95,
+      "operator": ">",
+      "quantile_method": "higher",
+      "seed": 42,
+      "threads": 2
+    },
+    "device": "cpu",
+    "fit_images": 168,
+    "fit_seconds": 11.239909800000532,
+    "manifest_id": "cab3745574ce78a6932500bb9707d7de2d4d35c88c2f870eaf7a9dc3d6f4ed26",
+    "memory_bank_shape": [
+      430,
+      384
+    ],
+    "model_version": "patchcore-bottle-188bbf43bf0a",
+    "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "threshold": 1.3622031211853027,
+    "threshold_version": "normal-quantile-acbbe02f2e47",
+    "validation_false_reject_rate": 0.04878048780487805,
+    "validation_images": 41,
+    "versions": {
+      "anomalib": "2.7.0",
+      "numpy": "2.5.4",
+      "pillow": "13.0.0",
+      "scikit-learn": "1.9.1",
+      "timm": "1.0.31",
+      "torch": "2.10.0+cpu",
+      "torchvision": "0.25.0+cpu"
+    },
+    "weights_sha256": "188bbf43bf0a4d9260fa26b1af55ccfcd4ecc1359d3b2ba3eaada46afc5b7349"
+  },
+  "held_out_evaluation": {
+    "auroc": 0.9904761904761904,
+    "average_precision": 0.9973885450075926,
+    "batch_one_seconds": {
+      "median": 0.031199843000649707,
+      "p95": 0.03185493450027934
+    },
+    "category": "bottle",
+    "config": {
+      "backbone": "resnet18.tv_in1k",
+      "batch_size": 8,
+      "coreset_ratio": 0.01,
+      "image_size": 128,
+      "layers": [
+        "layer2",
+        "layer3"
+      ],
+      "neighbors": 9,
+      "normal_quantile": 0.95,
+      "operator": ">",
+      "quantile_method": "higher",
+      "seed": 42,
+      "threads": 2
+    },
+    "confusion": {
+      "false_reject": 2,
+      "missed_anomaly": 1,
+      "true_anomaly": 62,
+      "true_normal": 18
+    },
+    "device": "cpu",
+    "f1": 0.9763779527559056,
+    "manifest_id": "cab3745574ce78a6932500bb9707d7de2d4d35c88c2f870eaf7a9dc3d6f4ed26",
+    "model_version": "patchcore-bottle-188bbf43bf0a",
+    "precision": 0.96875,
+    "recall": 0.9841269841269841,
+    "test_images": 83,
+    "test_normal_false_reject_rate": 0.1,
+    "threshold": 1.3622031211853027,
+    "threshold_version": "normal-quantile-acbbe02f2e47",
+    "timing_scope": "CPU batch-one image decode, RGB resize/normalization, model and image-score extraction; one validation warm-up excluded",
+    "versions": {
+      "anomalib": "2.7.0",
+      "numpy": "2.5.4",
+      "pillow": "13.0.0",
+      "scikit-learn": "1.9.1",
+      "timm": "1.0.31",
+      "torch": "2.10.0+cpu",
+      "torchvision": "0.25.0+cpu"
+    }
+  },
+  "limitations": [
+    "Single bottle-category baseline; capsule fitting and live station integration are pending.",
+    "Image size 128 and ResNet18/1% coreset are a small CPU configuration, not a reproduction of the published PatchCore settings.",
+    "Threshold fixed from 41 normal validation images before test scoring; its empirical false-reject rate is not a population guarantee.",
+    "Timing is a warm local file-cache/model run after manifest integrity reads; excludes loading, Kafka, Spark and dashboard visibility.",
+    "Full model weights, predictions, images and manifests remain local ignored artifacts."
+  ]
+}

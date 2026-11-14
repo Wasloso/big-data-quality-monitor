@@ -21,7 +21,7 @@ The local Spark setup, an [inspection event format](docs/event-schema.md), and a
 - [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; full pipeline/recovery verification pending).
 - [x] Implement local MVTec manifests and verify bottle preparation/integrity (168 fit / 41 validation / 83 test; capsule preparation pending).
 - [ ] Add historical queries and reconciliation.
-- [ ] Run MVTec AD images through PatchCore with a separately evaluated threshold.
+- [x] Fit and evaluate the first CPU PatchCore bottle artifact using a normal-validation threshold (capsule and station integration pending).
 - [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.
 - [x] Add a bounded read-only FastAPI view of existing quality results (UI1).
 - [x] Add initial React station/summary/detail views over the quality API (UI2; item photos/context not connected).
@@ -219,9 +219,13 @@ python3 -m unittest discover -s tests -v
 
 No additional Python dependencies are needed for unit tests. They cover sample totals, invalid inputs, run identities, publication timestamps, and delivery-error handling with a fake producer. The real broker is tested separately with `kafka-check`. See [the event format](docs/event-schema.md) for the fields and generator command. Scores and image paths in this sample are placeholders.
 
+## CPU image model
+
+The first real bottle model is fitted and evaluated. See [the CPU baseline guide](docs/vision-baseline.md) for the isolated optional environment, manifest/fit/evaluation commands, measured result and limitations. Weights and image predictions remain ignored local artifacts; no real-image station stream is published yet.
+
 ## Next steps
-- Run the deferred C07 sink/recovery checks and C09 manifest creation on local data.
-- Add visual anomaly detection with MVTec AD images and PatchCore.
+- Prepare capsule data/artifact and finish the deferred full recovery checks; bottle manifest execution and initial evaluation are recorded.
+- Connect the fitted model to continuous station processes and publish actual predictions/image references.
 - Add real inspection-image previews and measure correctness, throughput, and delays.
 
 Checked on 6 November 2026 using Docker Engine 29.2.1 on WSL2 (Linux x86-64). The container reported Spark 4.0.2, Python 3.10.12, and Java 17.0.17.

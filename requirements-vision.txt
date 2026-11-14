@@ -1,0 +1,7 @@
+anomalib==2.7.0
+torch==2.10.0
+torchvision==0.25.0
+timm==1.0.31
+numpy==2.5.4
+pillow==13.0.0
+scikit-learn==1.9.1
