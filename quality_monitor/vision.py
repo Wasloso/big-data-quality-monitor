@@ -172,17 +172,74 @@ def evaluate(args):
     print(json.dumps(summary, indent=2))
 
 
+def export_maps(args):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if not 1 <= len(args.image) <= 8:
+        raise ValueError("Choose one to eight images for a small qualitative map export")
+    model, transform, metadata = load_model(args.model)
+    paths = []
+    for relative in args.image:
+        if Path(relative).is_absolute() or Path(relative).parts[0] != metadata["category"]:
+            raise ValueError("Map image category differs from the fitted artifact")
+        paths.append(checked_path(args.data_root, relative))
+    args.output.mkdir(parents=True, exist_ok=False)
+    records = []
+    for index, (relative, path) in enumerate(zip(args.image, paths)):
+        with torch.inference_mode():
+            prediction = model(image_tensor(args.data_root, relative, transform).unsqueeze(0))
+        score = float(prediction.pred_score.item())
+        values = prediction.anomaly_map.squeeze().cpu().numpy()
+        if not np.isfinite(score) or not np.isfinite(values).all():
+            raise ValueError(f"Non-finite map/score for {relative}")
+        array_path = args.output / f"{index:02d}-map.npy"
+        figure_path = args.output / f"{index:02d}-source-map.png"
+        np.save(array_path, values)
+        with Image.open(path) as source:
+            source = source.convert("RGB").resize((metadata["config"]["image_size"],) * 2, Image.Resampling.BILINEAR)
+        figure, axes = plt.subplots(1, 2, figsize=(8, 4), layout="constrained")
+        axes[0].imshow(source)
+        axes[0].set_title("RGB model input")
+        heatmap = axes[1].imshow(values, cmap="magma", interpolation="nearest")
+        axes[1].set_title("Raw patch-distance map")
+        figure.colorbar(heatmap, ax=axes[1])
+        for axis in axes:
+            axis.axis("off")
+        figure.suptitle(f"{relative}\nimage score {score:.4f}; reject if > {metadata['threshold']:.4f}", fontsize=10)
+        figure.savefig(figure_path, dpi=120)
+        plt.close(figure)
+        records.append({
+            "image_uri": relative, "source_sha256": file_hash(path), "anomaly_score": score,
+            "is_reject": score > metadata["threshold"], "map_shape": list(values.shape),
+            "map_min": float(values.min()), "map_max": float(values.max()),
+            "array": array_path.name, "figure": figure_path.name,
+        })
+    report = {
+        "category": metadata["category"], "model_version": metadata["model_version"],
+        "threshold_version": metadata["threshold_version"], "threshold": metadata["threshold"],
+        "matplotlib_version": importlib.metadata.version("matplotlib"), "images": records,
+        "interpretation": "Each map has its own display scale. Raw patch distances are not probabilities or pixel decisions; the threshold applies to the image score only.",
+    }
+    (args.output / "maps.json").write_bytes(encoded(report))
+    print(json.dumps(report, indent=2))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("fit", "evaluate"):
+    for name in ("fit", "evaluate", "maps"):
         command = commands.add_parser(name)
         command.add_argument("--data-root", type=Path, required=True)
-        command.add_argument("--manifest", type=Path, required=True)
+        if name != "maps":
+            command.add_argument("--manifest", type=Path, required=True)
         command.add_argument("--output", type=Path, required=True, help="New artifact directory; never overwritten")
-        if name == "evaluate":
+        if name in ("evaluate", "maps"):
             command.add_argument("--model", type=Path, required=True)
-        else:
+        if name == "maps":
+            command.add_argument("--image", action="append", required=True, help="Relative category image path; repeat up to eight times")
+        elif name == "fit":
             command.add_argument("--image-size", type=int, default=128)
             command.add_argument("--coreset-ratio", type=float, default=.01)
             command.add_argument("--batch-size", type=int, default=8)
@@ -195,8 +252,10 @@ def main():
                 or not 0 < args.coreset_ratio <= 1 or not 0 < args.normal_quantile < 1):
             parser.error("Use a size >=32, positive batch/thread limits, coreset ratio in (0,1] and quantile in (0,1)")
         fit(args)
-    else:
+    elif args.command == "evaluate":
         evaluate(args)
+    else:
+        export_maps(args)
 
 
 if __name__ == "__main__":

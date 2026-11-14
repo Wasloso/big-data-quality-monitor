@@ -32,7 +32,7 @@ Defaults were fixed before looking at test predictions: 128×128 RGB bilinear re
 
 The decision policy is `score > threshold`, with the threshold set to the 95th percentile of normal validation scores using NumPy's `higher` quantile method. This is a predeclared demonstration policy, not supervised threshold optimization or a guarantee that future false rejects are at most 5%. Do not tune settings or threshold against the held-out test result.
 
-The fit command writes `fit-config.json` before training and then `model.pt`/`metadata.json` after successful fitting/calibration. Metadata includes the source manifest ID, settings, versions, bank size, raw threshold, model/threshold IDs and exported-weight hash. `load_model()` verifies the weight hash, restores the state on CPU using `weights_only=True` and does not redownload a pretrained network. This helper will support C11; stations must still choose a compatible category artifact.
+The fit command writes `fit-config.json` before training and then `model.pt`/`metadata.json` after successful fitting/calibration. Metadata includes the source manifest ID, settings, versions, bank size, raw threshold, model/threshold IDs and exported-weight hash. `load_model()` verifies the weight hash, restores the state on CPU using `weights_only=True` and does not redownload a pretrained network. This helper supports the C11 station; stations must still choose a compatible category artifact.
 
 Evaluation first warms the model on one normal validation image, then scores the unchanged test set one image at a time. It saves score/decision records without ground truth in `predictions.json`, and only joins the separate labels for metrics. The prediction artifact is evaluation/replay evidence, not a live camera stream. No anomalib postprocessor probability scaling is applied; raw anomaly scores and the numeric threshold can exceed one.
 
@@ -56,10 +56,46 @@ The timing covers decode, resize/normalization, CPU model and image-score extrac
 
 This single-category benchmark is not evidence of factory accuracy, capsule performance or generalization to arbitrary objects. Its high anomalous-image prevalence also differs from many production lines. Keep this first held-out result and its false-reject limitations visible rather than adjusting the threshold to improve it.
 
+## Recorded capsule result — 14 November 2026
+
+The separately prepared [capsule dataset](results/capsule-data-preparation.json) now has a fitted/calibrated/evaluated CPU artifact. Its configuration equals bottle's predeclared configuration; only the training images, memory bank and normal-validation threshold differ. No subsequent test-driven retuning was performed. See [the actual fit/evaluation record](results/capsule-patchcore-baseline.json).
+
+| Measure | Capsule result |
+| --- | --- |
+| Fit / normal validation / official test | 176 / 43 / 132 |
+| Memory bank | 450 × 384 |
+| Frozen q95 validation threshold | 1.1723406; 2/43 validation false rejects |
+| Image AUROC / average precision | 0.79657 / 0.94878 |
+| Precision / recall / F1 | 0.96491 / 0.50459 / 0.66265 |
+| Normal test items | 21 accepted, 2 falsely rejected |
+| Anomalous test items | 55 detected, 54 missed |
+| Test-normal false-reject rate | 2/23 = 8.70% |
+| Batch-one warm-cache median / p95 | 42.14 / 43.47 ms |
+
+**Capsule accuracy is limited:** this first small baseline missed about half of the anomalous test images. Its high anomaly prevalence (109/132) also helps average precision look stronger than the ranking/recall result. It is suitable for demonstrating category-specific data/model integration, not evidence of reliable capsule quality inspection. Do not improve its reported result by tuning against the now-observed test set. A future quality-improvement study needs a declared development/evaluation design independent of these test outcomes.
+
+Feature extraction/coreset took 13.73 seconds, excluding model loading and validation calibration. Timing has the same decode/preprocessing/model scope and warm-cache limitation as bottle; these are individual local runs, not a controlled category-speed comparison or pipeline benchmark.
+
+Use the combined ignored `data/mvtec_ad` root for the demo. Bottle's original manifest validates unchanged there; its existing fitted artifact is reused. Capsule commands use `--category capsule` for preparation and separate `artifacts/manifests/capsule-v1`, `artifacts/models/capsule-v1`, `artifacts/evaluations/capsule-v1` outputs. The `fit`/`evaluate` command interfaces above apply unchanged.
+
+## Small qualitative map export
+
+An explicit optional command exports up to eight source/map figures, unnormalized map arrays and a versioned summary. It never calibrates or changes the model:
+
+```bash
+.venv-vision/bin/python -m quality_monitor.vision maps --data-root "$MVTEC_ROOT" --model artifacts/models/capsule-v1 --image capsule/test/good/000.png --image capsule/test/crack/000.png --output artifacts/maps/capsule-v1
+```
+
+The isolated vision requirements now also pin the checked Matplotlib 3.11.2. Plotting imports occur only in this explicit command; downloads, fitting, evaluation and plotting remain outside default tests and API/Spark images.
+
+The recorded exports used the first lexical normal and non-normal test path for each category, without selecting by model score. All four map-export image scores/decisions match the already saved held-out predictions, confirming artifact reload/preprocessing consistency. The capsule crack example is a missed anomaly; it was retained rather than replaced by a successful example. See [the compact export record](results/category-map-exports.json). Full PNG/NumPy artifacts remain local under `artifacts/maps/`.
+
+Each figure has its own display scale. These are model-generated patch-distance maps, not probabilities, pixel decision masks or localization accuracy evidence. The frozen threshold applies to the image score, not individual heatmap values. Ground truth was not used as an inference feature; path groups were used only to choose the illustrations.
+
 ## Remaining integration
 
-Prepare/validate capsule separately, then repeat fit/calibration/evaluation with a capsule manifest and a new artifact directory. The station's category determines its matching memory bank and threshold; reuse the same code instead of applying a bottle model to an unsupported object. Capsule data and a capsule artifact are not present in this recorded result.
+The same station/model code now supports the two separately fitted bottle/capsule artifacts. A station must still select a compatible category, image list and artifact; never route capsule through the bottle bank. The capsule result's limitations remain part of the demo/report.
 
-The [station CLI](continuous-stations.md) now publishes actual bottle predictions/image references with independent process stop/restart and local status. Numeric thresholds now appear in matching producer-session reports. Anomaly-map artifacts, capsule and complete continuous Kafka-to-browser acceptance remain C10/C11/UI4/UI5 work. C12 closed-fixture historical reconciliation is checked; C13 recovery and C14 capacity experiments remain required. Keep fitted weights, full predictions, images and all runtime artifacts ignored; commit only small provenance/results records.
+The [station CLI](continuous-stations.md) publishes actual predictions/image references, and numeric thresholds appear in matching producer-session reports. Mixed-category global summaries, exact alert-window image navigation and complete continuously observed Kafka-to-browser acceptance remain C11/UI5/UI6 work. C12 closed-fixture historical reconciliation is checked; C13 recovery and C14 capacity experiments remain required. Keep full data/models/predictions/maps ignored; commit small provenance/results only.
 
 Algorithm/runtime references: [PatchCore paper](https://arxiv.org/abs/2106.08265), [anomalib PatchCore](https://anomalib.readthedocs.io/en/latest/markdown/guides/reference/models/image/patchcore.html), [torchvision ResNet18 weights/normalization](https://docs.pytorch.org/vision/0.25/models/generated/torchvision.models.resnet18.html).

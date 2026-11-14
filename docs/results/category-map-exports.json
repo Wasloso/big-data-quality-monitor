@@ -1,0 +1,83 @@
+{
+  "recorded_date": "2026-11-14",
+  "selection": "First normal and first non-normal test path in lexical order per category; selected without ranking model scores. Labels/path groups are for illustration only, never inference features or threshold fitting.",
+  "exports": {
+    "bottle": {
+      "category": "bottle",
+      "images": [
+        {
+          "anomaly_score": 1.2159113883972168,
+          "array": "00-map.npy",
+          "figure": "00-source-map.png",
+          "image_uri": "bottle/test/good/000.png",
+          "is_reject": false,
+          "map_max": 1.2406115531921387,
+          "map_min": 0.18876349925994873,
+          "map_shape": [
+            128,
+            128
+          ],
+          "source_sha256": "9e7bfe658efe9b6db2607a96405b4ac6880936eaf93b89c85bcd311122ceb57b"
+        },
+        {
+          "anomaly_score": 2.9697389602661133,
+          "array": "01-map.npy",
+          "figure": "01-source-map.png",
+          "image_uri": "bottle/test/broken_large/000.png",
+          "is_reject": true,
+          "map_max": 3.1012156009674072,
+          "map_min": 0.21795818209648132,
+          "map_shape": [
+            128,
+            128
+          ],
+          "source_sha256": "11a691a06a33dd78c5fcab6a822caa48c0d72f27f660e19f5abd9b5aa392b0eb"
+        }
+      ],
+      "interpretation": "Each map has its own display scale. Raw patch distances are not probabilities or pixel decisions; the threshold applies to the image score only.",
+      "matplotlib_version": "3.11.2",
+      "model_version": "patchcore-bottle-188bbf43bf0a",
+      "threshold": 1.3622031211853027,
+      "threshold_version": "normal-quantile-acbbe02f2e47"
+    },
+    "capsule": {
+      "category": "capsule",
+      "images": [
+        {
+          "anomaly_score": 0.997130811214447,
+          "array": "00-map.npy",
+          "figure": "00-source-map.png",
+          "image_uri": "capsule/test/good/000.png",
+          "is_reject": false,
+          "map_max": 1.0286763906478882,
+          "map_min": 0.40449202060699463,
+          "map_shape": [
+            128,
+            128
+          ],
+          "source_sha256": "86366d544a0182b04fdeacb62c9b23af8c72af24d35eaafeb8c210f603174728"
+        },
+        {
+          "anomaly_score": 1.0097066164016724,
+          "array": "01-map.npy",
+          "figure": "01-source-map.png",
+          "image_uri": "capsule/test/crack/000.png",
+          "is_reject": false,
+          "map_max": 1.0328348875045776,
+          "map_min": 0.42554375529289246,
+          "map_shape": [
+            128,
+            128
+          ],
+          "source_sha256": "6462a533da731a19e4df05fc1815719b94603aee341a2ac620add75ec2334ef4"
+        }
+      ],
+      "interpretation": "Each map has its own display scale. Raw patch distances are not probabilities or pixel decisions; the threshold applies to the image score only.",
+      "matplotlib_version": "3.11.2",
+      "model_version": "patchcore-capsule-72987cbf1cf3",
+      "threshold": 1.1723406314849854,
+      "threshold_version": "normal-quantile-f6e26830b796"
+    }
+  },
+  "map_scores_match_saved_evaluation": true
+}

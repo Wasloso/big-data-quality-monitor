@@ -8,7 +8,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 Kafka, Spark validation/deduplication/windowing, Parquet history and SQLite serving views are implemented. FastAPI and React show quality windows, alerts and bounded recent inspections with an optional local image mount. The finite synthetic fixture remains a separate correctness/replay mode.
 
-The original MVTec bottle data is prepared and a CPU PatchCore artifact has been fitted and evaluated with a frozen normal-validation threshold. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Simulated work-order/operation/temperature/speed context now persists through the pipeline and serving API. Producer-session state/counters now have a bounded read-only API and independent React panel, with producer-only run discovery. Capsule and full recovery/capacity experiments remain incomplete. Historical Spark reconciliation is checked against finalized SQLite windows and an independent fixture oracle.
+Original MVTec bottle and capsule data are prepared, with separately fitted CPU PatchCore artifacts and frozen normal-validation thresholds. The first capsule baseline has limited recall; see the recorded model results. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Simulated work-order/operation/temperature/speed context now persists through the pipeline and serving API. Producer-session state/counters now have a bounded read-only API and independent React panel, with producer-only run discovery. Capsule and full recovery/capacity experiments remain incomplete. Historical Spark reconciliation is checked against finalized SQLite windows and an independent fixture oracle.
 
 See [the context and runtime transition guide](docs/station-context.md) before using the new v2 archive/checkpoint/serving paths; previous runtime state is retained.
 
@@ -25,7 +25,7 @@ See [the context and runtime transition guide](docs/station-context.md) before u
 - [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; full pipeline/recovery verification pending).
 - [x] Implement local MVTec manifests and verify bottle preparation/integrity (bottle: 168/41/83; capsule: 176/43/132 fit/validation/test, both integrity-checked).
 - [x] Add bounded historical Spark queries and reconcile closed fixture windows with SQLite and an independent oracle (C12).
-- [x] Fit and evaluate the first CPU PatchCore bottle artifact using a normal-validation threshold (capsule pending).
+- [x] Fit/evaluate separate CPU PatchCore bottle/capsule artifacts and export qualitative maps, keeping the weak capsule result visible.
 - [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.
 - [x] Add a bounded read-only FastAPI view of existing quality results (UI1).
 - [x] Add initial React station/summary/detail views over the quality API (UI2; persisted simulated context now shown on station cards/details).
@@ -34,7 +34,7 @@ See [the context and runtime transition guide](docs/station-context.md) before u
 - [x] Add continuous station processes with real bottle inference, independent stop/restart and local producer status.
 - [x] Persist versioned simulated machine context through Kafka/Spark/SQLite/API and display it with observation age in React.
 - [x] Show bounded producer-session reports, acknowledgements and errors independently of processed windows.
-- [ ] Add the capsule artifact and complete mixed-category acceptance.
+- [ ] Complete mixed-category dashboard/live-demo acceptance using the two fitted artifacts.
 - [ ] Complete the mixed-category image demo and measure full recovery, throughput and visibility delays.
 
 ## Publish inspections to Kafka
