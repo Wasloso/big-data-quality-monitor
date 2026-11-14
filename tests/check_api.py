@@ -12,6 +12,8 @@ from fastapi.testclient import TestClient
 
 from quality_monitor.api import app
 from quality_monitor.store import write_batch
+from quality_monitor.inspection_store import write_inspections
+from quality_monitor.sample import sample_events
 
 
 class ApiChecks(unittest.TestCase):
@@ -50,6 +52,31 @@ class ApiChecks(unittest.TestCase):
                     concurrent = client.get("/api/overview", params=params).json()
                     self.assertEqual(sum(row["rejects"] for row in concurrent["stations"]), 18)
                     connection.rollback()
+
+    def test_recent_inspections_are_paged_and_isolated_from_other_categories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "stations.sqlite"
+            base = next(iter(sample_events()))
+            params = {name: base[name] for name in ("run_id", "line_id", "category", "model_version", "threshold_version")}
+            with patch("quality_monitor.api.STATIONS_DATABASE", database), TestClient(app) as client:
+                self.assertEqual(client.get("/api/inspections", params=params).json()["state"], "missing")
+                self.assertFalse(database.exists())
+                rows = [{**base, "inspection_id": f"item-{index}"} for index in range(4)]
+                write_inspections(database, [*rows, {**base, "inspection_id": "capsule-1", "category": "capsule"},
+                                            {**base, "inspection_id": "other-run", "run_id": "other"}], "epoch", 0)
+                first = client.get("/api/inspections", params={**params, "limit": 2}).json()
+                self.assertEqual(first["retained_count"], 4)
+                self.assertEqual([row["inspection_id"] for row in first["inspections"]], ["item-3", "item-2"])
+                self.assertIs(first["inspections"][0]["is_reject"], True)
+                self.assertEqual(first["latest_inspection"]["inspection_id"], "item-3")
+                second = client.get("/api/inspections", params={**params, "limit": 2, **first["next_cursor"]}).json()
+                self.assertEqual([row["inspection_id"] for row in second["inspections"]], ["item-1", "item-0"])
+                self.assertIsNone(second["next_cursor"])
+                self.assertEqual(client.get("/api/inspections", params={**params, "category": "capsule"}).json()["retained_count"], 1)
+                self.assertEqual(client.get("/api/inspections", params={**params, "line_id": "B"}).json()["state"], "empty")
+                self.assertEqual(client.get("/api/inspections", params={**params, "limit": 101}).status_code, 422)
+                self.assertEqual(client.get("/api/inspections", params={**params, "before_id": "item-2"}).status_code, 422)
+                self.assertEqual(client.get("/api/inspections", params={**params, "before_id": "item-2", "before_time": "2026-11-07T12:00:00"}).status_code, 422)
 
     def test_oversized_selection_fails_instead_of_returning_partial_totals(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -40,3 +40,13 @@ npm run dev
 ```
 
 Vite provides the development URL (normally `http://127.0.0.1:5173`) and proxies `/api` to `127.0.0.1:8000`. For a local single-origin run, execute `npm run build`, then start/restart the Python API from the repository root. Build artifacts and `node_modules` stay ignored; `package-lock.json` is committed. No UI test framework is introduced.
+
+## Recent individual inspections (UI3 foundation)
+
+First build the [inspection serving view](inspection-serving.md) with `spark-inspections`. The API reads its separate `STATIONS_DATABASE` (default `/data/serving/stations.sqlite`) through the existing narrow serving mount. It never queries clean Parquet directly.
+
+`GET /api/inspections` requires `run_id`, `line_id`, `category`, `model_version` and `threshold_version`. It returns recent inspection metadata, `latest_inspection`, `retained_count`, a projection batch timestamp and a `next_cursor`. `limit` defaults to 50 and is capped at 100. To request the next page, pass both returned cursor fields as `before_time` and `before_id`; time must include its UTC offset. Ordering is acquisition time descending, then inspection ID descending, so equal-time items do not disappear between pages.
+
+The history scope is explicitly `retained_samples`. Its count is not the production total. The latest observation is for the selected station/detector even while paging older items; it is not a machine heartbeat. The projection batch timestamp describes that database's global last applied batch and does not prove that a particular station is currently running. Quality windows and this projection update independently.
+
+Missing item databases return `missing` without creating a file, empty selections return `empty`, and invalid cursors/limits return 422. Run/station/category/model/threshold filters apply to the item list, count and latest observation. Returned decisions are booleans. Image references are metadata only: this step adds neither image-file HTTP serving nor real model inference, and the React photo panel is not connected to this endpoint yet.

@@ -12,15 +12,17 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Quality monitor API")
 DATABASE = Path(os.environ.get("QUALITY_DATABASE", "/data/serving/quality.sqlite"))
+STATIONS_DATABASE = Path(os.environ.get("STATIONS_DATABASE", "/data/serving/stations.sqlite"))
 
 
 @contextmanager
-def snapshot():
-    if not DATABASE.is_file():
+def snapshot(database=None):
+    database = DATABASE if database is None else database
+    if not database.is_file():
         yield None
         return
     try:
-        with closing(sqlite3.connect(DATABASE.resolve().as_uri() + "?mode=ro", timeout=5)) as connection:
+        with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", timeout=5)) as connection:
             connection.row_factory = sqlite3.Row
             connection.execute("BEGIN")
             yield connection
@@ -42,12 +44,12 @@ def runs():
     }
 
 
-def utc_bound(value):
+def utc_bound(value, timespec="auto"):
     if value is None:
         return None
     if value.tzinfo is None or value.utcoffset() is None:
         raise HTTPException(422, "Time filters must include a UTC offset")
-    return value.astimezone(timezone.utc).isoformat()
+    return value.astimezone(timezone.utc).isoformat(timespec=timespec)
 
 
 @app.get("/api/overview")
@@ -102,6 +104,50 @@ def overview(
         "response_time": datetime.now(timezone.utc).isoformat(),
         "updated_at": max((row["updated_at"] for row in windows), default=None),
         "stations": list(stations.values()), "windows": windows, "alerts": alerts,
+    }
+
+
+@app.get("/api/inspections")
+def inspections(
+    run_id: str = Query(min_length=1, max_length=200),
+    line_id: str = Query(min_length=1, max_length=200),
+    category: str = Query(min_length=1, max_length=200),
+    model_version: str = Query(min_length=1, max_length=200),
+    threshold_version: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=50, ge=1, le=100),
+    before_time: datetime | None = None,
+    before_id: str | None = Query(default=None, min_length=1, max_length=200),
+):
+    if (before_time is None) != (before_id is None):
+        raise HTTPException(422, "Provide both before_time and before_id for pagination")
+    before = utc_bound(before_time, timespec="microseconds")
+    where = "run_id=? AND line_id=? AND category=? AND model_version=? AND threshold_version=?"
+    values = [run_id, line_id, category, model_version, threshold_version]
+    latest, batch_time, retained = None, None, 0
+    with snapshot(STATIONS_DATABASE) as connection:
+        rows = []
+        if connection is not None:
+            latest_row = connection.execute("SELECT * FROM station_latest WHERE " + where, values).fetchone()
+            latest = dict(latest_row) if latest_row else None
+            retained = connection.execute("SELECT COUNT(*) FROM inspection_samples WHERE " + where, values).fetchone()[0]
+            batch_time = connection.execute("SELECT MAX(processed_at) FROM processed_batches").fetchone()[0]
+            if before is not None:
+                where += " AND (event_time, inspection_id) < (?, ?)"
+                values.extend([before, before_id])
+            rows = [dict(row) for row in connection.execute(
+                "SELECT * FROM inspection_samples WHERE " + where
+                + " ORDER BY event_time DESC, inspection_id DESC LIMIT ?", [*values, limit + 1],
+            )]
+    more = len(rows) > limit
+    rows = rows[:limit]
+    for row in rows + ([latest] if latest else []):
+        row["is_reject"] = bool(row["is_reject"])
+    return {
+        "state": "missing" if connection is None else "ready" if rows else "empty",
+        "response_time": datetime.now(timezone.utc).isoformat(),
+        "projection_batch_at": batch_time, "history_scope": "retained_samples",
+        "retained_count": retained, "latest_inspection": latest, "inspections": rows,
+        "next_cursor": {"before_time": rows[-1]["event_time"], "before_id": rows[-1]["inspection_id"]} if more else None,
     }
 
 

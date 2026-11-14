@@ -154,6 +154,7 @@ services:
           nocopy: true
     environment:
       QUALITY_DATABASE: /data/serving/quality.sqlite
+      STATIONS_DATABASE: /data/serving/stations.sqlite
 
   spark-check:
     image: apache/spark:4.0.2
