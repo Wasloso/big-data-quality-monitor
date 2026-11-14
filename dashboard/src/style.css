@@ -44,3 +44,16 @@ summary { cursor: pointer; font-weight: bold; }
   label { margin-bottom: 12px; }
   .counts { gap: 16px; }
 }
+
+.inspection-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(240px, 2fr); gap: 20px; align-items: start; }
+.inspection-detail { min-width: 0; overflow-wrap: anywhere; }
+.inspection-detail h4 { margin-top: 0; }
+.inspection-detail dt { font-weight: bold; margin-top: 12px; }
+.inspection-detail dd { margin: 4px 0; }
+.inspection-detail img { max-width: 100%; max-height: 360px; object-fit: contain; }
+.item-pages { display: flex; gap: 12px; margin: 16px 0; }
+button:disabled { cursor: default; opacity: 0.5; }
+button[aria-pressed="true"] { background: #e5edf5; border-color: #185ba5; }
+@media (max-width: 900px) { .inspection-layout { grid-template-columns: minmax(0, 1fr); } }
+
+.inspection-list { max-height: 520px; overflow: auto; }

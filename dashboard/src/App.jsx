@@ -1,16 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { getJson, utcFilter } from './api.js';
+import RecentInspections from './RecentInspections.jsx';
 
 const runKey = (run) => JSON.stringify([run.run_id, run.category, run.model_version, run.threshold_version]);
 const percent = (value) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
 const utc = (value) => value ? new Date(value).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : 'Unavailable';
 const stale = (value) => !value || Date.now() - Date.parse(value) > 300_000;
-
-async function getJson(path, signal) {
-  const response = await fetch(path, { signal, cache: 'no-store' });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.detail || 'Could not read quality results');
-  return body;
-}
 
 function Counts({ stations }) {
   const inspections = stations.reduce((sum, row) => sum + row.inspections, 0);
@@ -96,8 +91,8 @@ export default function App() {
         const params = new URLSearchParams({ run_id: current.run_id, category: current.category,
           model_version: current.model_version, threshold_version: current.threshold_version });
         if (stationId) params.set('line_id', stationId);
-        if (from) params.set('from_time', `${from}:00+00:00`);
-        if (to) params.set('to_time', `${to}:00+00:00`);
+        if (from) params.set('from_time', utcFilter(from));
+        if (to) params.set('to_time', utcFilter(to));
         const result = await getJson(`/api/overview?${params}`, controller.signal);
         if (active) { setData(result); setError(''); }
       } catch (failure) {
@@ -129,23 +124,23 @@ export default function App() {
         {!runs.length && <option value="">No runs available</option>}
         {runs.map((run) => <option key={runKey(run)} value={runKey(run)}>{run.run_id} · {run.category} · {run.model_version} · {run.threshold_version}</option>)}
       </select></label>
-      <label>From (UTC)<input type="datetime-local" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
-      <label>To (UTC)<input type="datetime-local" value={to} onChange={(event) => setTo(event.target.value)} /></label>
+      <label>From (UTC)<input type="datetime-local" step="1" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
+      <label>To (UTC)<input type="datetime-local" step="1" value={to} onChange={(event) => setTo(event.target.value)} /></label>
     </section>
     {truncated && <p className="notice">Showing the 100 most recently updated run/detector combinations.</p>}
     {error && <p className="warning" role="alert">{error}. {data && 'Showing the last successful response.'}</p>}
     {loading && <p role="status">Loading results…</p>}
     {!loading && !error && !runs.length && <p className="notice">{source === 'missing' ? 'No serving database yet.' : 'No inspection results yet.'}</p>}
+    {stationId && context && <h2>Station {stationId}</h2>}
     {data && <>
       <p className="freshness">Response: {utc(data.response_time)} · Last stored update: {utc(data.updated_at)} · Refresh every 5 seconds</p>
-      {stale(data.updated_at) && <p className="warning">No recent stored results. The source may be idle or processing may have stopped.</p>}
+      {data.updated_at && stale(data.updated_at) && <p className="warning">No recent stored results. The source may be idle or processing may have stopped.</p>}
       {context?.model_version.startsWith('fixture') && <p className="notice">Fixture mode: predictions and image references are synthetic.</p>}
       <p>Counts cover selected stored windows. Provisional results can change; predicted accepts are not confirmed product passes.</p>
       {!stations.length ? <p className="notice">No stored windows match this station or time range.</p> : stationId ? <>
-        <h2>Station {stationId}</h2><Counts stations={stations} />
+        <Counts stations={stations} />
         <section><h3>Latest station context</h3><p>Model: {context?.model_version} · Category: {context?.category} · Threshold version: {context?.threshold_version}</p>
-          <p>Work order, current item, machine state, temperature and conveyor speed: unavailable.</p></section>
-        <section><h3>Inspection photos</h3><p>Individual inspection records and photos are not connected yet.</p></section>
+          <p>Work order, machine state, temperature and conveyor speed: unavailable.</p></section>
         <section><h3>Window history</h3><Windows rows={windows} /></section>
         <section><h3>Rule evaluations</h3><Rules rows={alerts} windows={windows} /></section>
       </> : summary ? <>
@@ -162,5 +157,7 @@ export default function App() {
         </section>)}</div>
       </>}
     </>}
+    {stationId && context && <RecentInspections key={`${selected}|${stationId}|${from}|${to}`}
+      context={context} stationId={stationId} from={from} to={to} refresh={refresh} />}
   </main>;
 }
