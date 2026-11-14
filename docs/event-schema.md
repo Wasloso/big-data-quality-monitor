@@ -55,3 +55,8 @@ These checks validate the event contract and known sample totals. They do not te
 `quality_monitor.producer` publishes the generated sample to the `inspections` topic. Each invocation uses a new run ID by default and prefixes inspection/product IDs with it. Passing the same `--run-id` reuses those identities for deliberate duplicate injection. The Kafka key is `line_id`; images remain outside Kafka. Before enqueueing each message the producer replaces `published_at` with the current UTC wall-clock time while preserving synthetic `event_time`.
 
 The producer checks delivery callbacks and flushes pending messages before reporting success. Producer idempotence handles retries within a session, but does not deduplicate separate runs or guarantee exactly-once downstream results. See the repository README for Compose commands and the round-trip check.
+
+
+## Actual image stations
+
+The separate [continuous station CLI](continuous-stations.md) publishes this same schema with real model predictions. It sets `event_time` at actual UTC acquisition and `published_at` after inference, before enqueue. Every acquisition/restart has a fresh inspection/product identity, while a repeated relative source path retains its image ID. The configured category must match the image list and fitted model; ground truth and saved scores are not read by the online loop. Ctrl+C drains queued deliveries and emits no closure controls. Simulated machine context remains a future versioned parsed-schema extension.

@@ -2,11 +2,13 @@
 
 Project for the **Big Data in Industry 4.0** university course, developed by a three-person team.
 
-We want to monitor product quality across simulated production lines. A vision model will check product images, Kafka will carry inspection results, and Spark will calculate quality statistics. Inspection history is stored in Parquet. We are moving from the existing Streamlit view to a small React dashboard backed by FastAPI, with continuous image-inspection stations planned next.
+We want to monitor product quality across simulated production lines. A vision model will check product images, Kafka will carry inspection results, and Spark will calculate quality statistics. Inspection history is stored in Parquet. We are moving from the existing Streamlit view to a small React dashboard backed by FastAPI, with continuous local image-inspection stations.
 
 ## Current stage
 
-The local Spark setup, an [inspection event format](docs/event-schema.md), and a Kafka publication step are implemented. A repeatable sample contains 120 made-up inspections across two lines: 60 per line, with 6 rejects on A and 12 on B. The producer publishes that sample to a local Kafka broker, and a separate integration check reads it back and verifies the totals. Spark Structured Streaming validates these messages and archives them in Parquet, including invalid payloads with error reasons. Separate streaming jobs deduplicate valid records into clean Parquet and display provisional or finalized quality windows. Explicit progress controls close finite runs. A SQLite sink now persists window snapshots and threshold alert status, and a local MVTec manifest tool prepares reproducible splits. A read-only Streamlit dashboard now displays stored windows and alert evaluations. The C07 store unit checks pass; a clean-archive-to-SQLite writer run is also checked. Full pipeline crash-recovery verification and C09 execution on actual local data remain pending. The script in `scripts/check_spark.py` remains the original four-row batch smoke check. A FastAPI service and initial React station/summary/detail views now read the same serving data. They show window history and rule evaluations. A bounded clean-history projection now stores individual inspection references for the paged API; Station details now show the retained item list and selected inspection metadata; images load only when a local image root is configured. Machine context and actual inference remain pending. Continuous image inference is still pending.
+Kafka, Spark validation/deduplication/windowing, Parquet history and SQLite serving views are implemented. FastAPI and React show quality windows, alerts and bounded recent inspections with an optional local image mount. The finite synthetic fixture remains a separate correctness/replay mode.
+
+The original MVTec bottle data is prepared and a CPU PatchCore artifact has been fitted and evaluated with a frozen normal-validation threshold. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Capsule, simulated machine context, producer-status presentation, historical reconciliation and full recovery/capacity experiments remain incomplete.
 
 ## Roadmap
 
@@ -21,14 +23,15 @@ The local Spark setup, an [inspection event format](docs/event-schema.md), and a
 - [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; full pipeline/recovery verification pending).
 - [x] Implement local MVTec manifests and verify bottle preparation/integrity (168 fit / 41 validation / 83 test; capsule preparation pending).
 - [ ] Add historical queries and reconciliation.
-- [x] Fit and evaluate the first CPU PatchCore bottle artifact using a normal-validation threshold (capsule and station integration pending).
+- [x] Fit and evaluate the first CPU PatchCore bottle artifact using a normal-validation threshold (capsule pending).
 - [x] Display stored windows and alert evaluations in a read-only Streamlit dashboard.
 - [x] Add a bounded read-only FastAPI view of existing quality results (UI1).
-- [x] Add initial React station/summary/detail views over the quality API (UI2; item photos/context not connected).
+- [x] Add initial React station/summary/detail views over the quality API (UI2; simulated machine context pending).
 - [x] Project clean history into bounded recent inspections/latest observations (UI3 foundation).
 - [x] Display paged recent items and selected images from an optional confined local root.
-- [ ] Add continuous station processes, persisted simulated context and fitted bottle/capsule inference.
-- [ ] Add real inspection-image previews and measure correctness, throughput, and delays.
+- [x] Add continuous station processes with real bottle inference, independent stop/restart and local producer status.
+- [ ] Add the capsule artifact, persisted simulated context and producer-status API/UI.
+- [ ] Complete the mixed-category image demo and measure full recovery, throughput and visibility delays.
 
 ## Publish inspections to Kafka
 
@@ -221,12 +224,12 @@ No additional Python dependencies are needed for unit tests. They cover sample t
 
 ## CPU image model
 
-The first real bottle model is fitted and evaluated. See [the CPU baseline guide](docs/vision-baseline.md) for the isolated optional environment, manifest/fit/evaluation commands, measured result and limitations. Weights and image predictions remain ignored local artifacts; no real-image station stream is published yet.
+The first real bottle model is fitted and evaluated. See [the CPU baseline guide](docs/vision-baseline.md) for the isolated optional environment, manifest/fit/evaluation commands, measured result and limitations. Weights and image predictions remain ignored local artifacts; real bottle station publication is available through [the continuous CLI](docs/continuous-stations.md).
 
 ## Next steps
 - Prepare capsule data/artifact and finish the deferred full recovery checks; bottle manifest execution and initial evaluation are recorded.
-- Connect the fitted model to continuous station processes and publish actual predictions/image references.
-- Add real inspection-image previews and measure correctness, throughput, and delays.
+- Add persisted simulated work-order/temperature/speed context and producer-status presentation.
+- Reconcile historical Spark results and measure full-pipeline recovery, throughput and visibility delays.
 
 Checked on 6 November 2026 using Docker Engine 29.2.1 on WSL2 (Linux x86-64). The container reported Spark 4.0.2, Python 3.10.12, and Java 17.0.17.
 

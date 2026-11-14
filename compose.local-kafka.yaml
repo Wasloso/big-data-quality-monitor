@@ -1,0 +1,9 @@
+# Optional loopback listener for station processes in the host's vision environment.
+services:
+  kafka:
+    ports:
+      - "127.0.0.1:29092:29092"
+    environment:
+      KAFKA_LISTENERS: PLAINTEXT://:19092,CONTROLLER://:29093,HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,HOST:PLAINTEXT

@@ -1,0 +1,87 @@
+{
+  "recorded_date": "2026-11-14",
+  "run_id": "c11-bottle-50dabb0600",
+  "model_version": "patchcore-bottle-188bbf43bf0a",
+  "threshold_version": "normal-quantile-acbbe02f2e47",
+  "image_sequence_size": 3,
+  "producer_sessions": {
+    "A-first": {
+      "session_id": "acad5cf47d1947038f7d0e491eed6b35",
+      "target_rate": 2.0,
+      "attempted": 4,
+      "completed": 4,
+      "queued": 4,
+      "published": 4,
+      "inference_errors": 0,
+      "enqueue_errors": 0,
+      "delivery_errors": 0,
+      "pending": 0,
+      "state": "stopped"
+    },
+    "A-restarted": {
+      "session_id": "de113c1bcd7d4db3a3e6e465209c720c",
+      "target_rate": 2.0,
+      "attempted": 3,
+      "completed": 3,
+      "queued": 3,
+      "published": 3,
+      "inference_errors": 0,
+      "enqueue_errors": 0,
+      "delivery_errors": 0,
+      "pending": 0,
+      "state": "stopped"
+    },
+    "B": {
+      "session_id": "bbb8f9d21104404ca7fa4b69a4335b56",
+      "target_rate": 3.0,
+      "attempted": 32,
+      "completed": 32,
+      "queued": 32,
+      "published": 32,
+      "inference_errors": 0,
+      "enqueue_errors": 0,
+      "delivery_errors": 0,
+      "pending": 0,
+      "state": "stopped"
+    }
+  },
+  "kafka_received": 39,
+  "unique_inspection_ids": 39,
+  "B_published_at_A_stop": 7,
+  "B_published_after_A_restart": 32,
+  "stop_signal": "SIGINT",
+  "closure_controls_emitted": 0,
+  "downstream_mode": "Sequential availableNow drains after the producer check, preserving existing archives/checkpoints/serving databases",
+  "serving_check": {
+    "station_counts": {
+      "A": {
+        "inspections": 7,
+        "rejects": 5
+      },
+      "B": {
+        "inspections": 32,
+        "rejects": 22
+      }
+    },
+    "matching_inspection_ids": 39,
+    "all_windows_provisional": true,
+    "sample_source_image": {
+      "inspection_id": "c11-bottle-50dabb0600:A:de113c1bcd7d4db3a3e6e465209c720c:3",
+      "image_uri": "bottle/test/good/000.png",
+      "sha256": "9e7bfe658efe9b6db2607a96405b4ac6880936eaf93b89c85bcd311122ceb57b",
+      "http_status": 200
+    }
+  },
+  "checks": {
+    "fast_unit_checks_passed": 12,
+    "new_focused_station_checks": 2,
+    "optional_compose_validation": "passed"
+  },
+  "limitations": [
+    "Both concurrent stations used the fitted bottle artifact; capsule and mixed-category acceptance are pending.",
+    "This is a small actual-inference integration check; no achieved-throughput, end-to-end latency or processor-crash recovery result is claimed.",
+    "Provisional windows remain provisional; no future progress controls were emitted on station stop.",
+    "Simulated machine context and serving the producer status through API/React are pending.",
+    "Full runtime statuses, prediction records and logs remain ignored local artifacts."
+  ]
+}

@@ -18,4 +18,4 @@ For local Python development, set `INSPECTION_IMAGE_ROOT=/absolute/path/to/image
 
 A missing/pruned inspection, unsupported file, unsafe reference or missing image returns 404. A known inspection without image storage configured returns 503. Live image responses use `Cache-Control: no-store`; changing or unavailable files must not be mistaken for a permanently cached successful result. Database schema/read errors remain explicit 503 responses.
 
-This adds image transport only. The current fixture scores and references remain synthetic. Dataset preparation, fitted bottle/capsule models, actual image inference, anomaly maps and numeric detector-threshold provenance are separate remaining work.
+The finite fixture scores/references remain synthetic. Bottle preparation, a fitted/evaluated CPU artifact and [actual station publication](continuous-stations.md) now exist; configure the dataset parent as the image root to serve their source photos. Capsule, anomaly maps and numeric-threshold presentation remain follow-ups.
