@@ -8,7 +8,7 @@ We want to monitor product quality across simulated production lines. A vision m
 
 Kafka, Spark validation/deduplication/windowing, Parquet history and SQLite serving views are implemented. FastAPI and React show quality windows, alerts and bounded recent inspections with an optional local image mount. The finite synthetic fixture remains a separate correctness/replay mode.
 
-Original MVTec bottle and capsule data are prepared, with separately fitted CPU PatchCore artifacts and frozen normal-validation thresholds. The first capsule baseline has limited recall; see the recorded model results. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Simulated work-order/operation/temperature/speed context now persists through the pipeline and serving API. Producer-session state/counters now have a bounded read-only API and independent React panel, with producer-only run discovery. Mixed-category global summaries and a live two-station walkthrough now pass; full processor recovery/capacity experiments remain incomplete. Historical Spark reconciliation is checked against finalized SQLite windows and an independent fixture oracle.
+Original MVTec bottle and capsule data are prepared, with separately fitted CPU PatchCore artifacts and frozen normal-validation thresholds. The first capsule baseline has limited recall; see the recorded model results. A continuous station CLI now runs actual inference and publishes image references and predictions through Kafka. It supports independent stop/restart, fresh acquisition identities and local status counts; see [the station guide](docs/continuous-stations.md). Simulated work-order/operation/temperature/speed context now persists through the pipeline and serving API. Producer-session state/counters now have a bounded read-only API and independent React panel, with producer-only run discovery. Mixed-category global summaries and a live two-station walkthrough now pass. Retained-state Q3 crash/retry recovery is checked against real Kafka; capacity experiments remain incomplete. Historical Spark reconciliation is checked against finalized SQLite windows and an independent fixture oracle.
 
 See [the context and runtime transition guide](docs/station-context.md) before using the new v2 archive/checkpoint/serving paths; previous runtime state is retained.
 
@@ -22,7 +22,7 @@ See [the context and runtime transition guide](docs/station-context.md) before u
 - [x] Display provisional event-time quality windows from the clean archive.
 - [x] Finalize quality windows with progress records and verify delayed arrivals.
 - [x] Store raw inspection history in Parquet with persistent ingestion checkpoints.
-- [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; full pipeline/recovery verification pending).
+- [x] Implement transactional SQLite window snapshots and deterministic threshold alerts (C07; scoped Q3 recovery verified in C13).
 - [x] Implement local MVTec manifests and verify bottle preparation/integrity (bottle: 168/41/83; capsule: 176/43/132 fit/validation/test, both integrity-checked).
 - [x] Add bounded historical Spark queries and reconcile closed fixture windows with SQLite and an independent oracle (C12).
 - [x] Fit/evaluate separate CPU PatchCore bottle/capsule artifacts and export qualitative maps, keeping the weak capsule result visible.
@@ -35,7 +35,8 @@ See [the context and runtime transition guide](docs/station-context.md) before u
 - [x] Persist versioned simulated machine context through Kafka/Spark/SQLite/API and display it with observation age in React.
 - [x] Show bounded producer-session reports, acknowledgements and errors independently of processed windows.
 - [x] Check mixed-category dashboard/live flow using both fitted artifacts (115 unique real predictions; independent stop/restart).
-- [ ] Measure full processor recovery, throughput and visibility delays, then rehearse the clean-checkout handoff.
+- [x] Verify retained-state Q3 crash/retry recovery over real Kafka with duplicates, invalid and delayed records (C13).
+- [ ] Measure throughput and visibility delays, then rehearse the clean-checkout handoff.
 
 ## Publish inspections to Kafka
 
@@ -170,6 +171,8 @@ The scenario injects ten duplicates and two invalid payloads, holds back two rej
 
 ## Historical queries
 
+For C13, the same pipeline runner also supports a real-Kafka recovery mode that kills a separate Q3 driver after its SQLite transaction and verifies checkpoint replay, backlog catch-up, exact inspection IDs and stable final window/alert results. It passed on 17 November 2026; see [the recovery instructions](docs/recovery-check.md) for the isolated topic, command, measured result, retained artifacts and scope.
+
 See [the historical-analysis guide](docs/historical-analysis.md) for the standalone command, actual finalized-run reconciliation and accounting for invalid, duplicate, control and excluded IDs. The report uses bounded aggregate results and keeps provisional runs distinct from closed-run evidence.
 
 ## Project individual inspection history
@@ -243,7 +246,7 @@ See [the producer-status guide](docs/producer-status.md) for the optional read-o
 The first real bottle model is fitted and evaluated. See [the CPU baseline guide](docs/vision-baseline.md) for the isolated optional environment, manifest/fit/evaluation commands, measured result and limitations. Weights and image predictions remain ignored local artifacts; real bottle station publication is available through [the continuous CLI](docs/continuous-stations.md).
 
 ## Next steps
-- Finish the required retained-state recovery and load/capacity checks.
+- Measure sustained throughput, backlog recovery under load and visibility delays (C14).
 - Rehearse a clean-checkout demo and report the measured limits; initial historical reconciliation and the low-rate mixed-category live walkthrough are checked.
 
 Checked on 6 November 2026 using Docker Engine 29.2.1 on WSL2 (Linux x86-64). The container reported Spark 4.0.2, Python 3.10.12, and Java 17.0.17.

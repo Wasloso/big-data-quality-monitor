@@ -1,0 +1,63 @@
+{
+  "recorded_date": "2026-11-17",
+  "base_revision": "3b43ffb",
+  "implementation": "Uncommitted C13 increment; exact runner source hashes recorded below",
+  "source_sha256": {
+    "scripts/check_pipeline.py": "ef365acea6b8776b6f8e31d7131c6e38bb7d2cb411d0040565f42634f0a42ec0",
+    "scripts/recovery_worker.py": "37ff02989d0c364e679342196b403be784dbd794bb2fe106035ac14863fff255"
+  },
+  "runtime": {
+    "spark": "4.0.2",
+    "kafka": "4.1.2",
+    "connector": "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.2",
+    "java": "17.0.17",
+    "docker_engine": "28.5.1",
+    "platform": "Linux WSL2 amd64",
+    "master": "local[2]",
+    "shuffle_partitions": 2,
+    "worker_trigger_seconds": 1
+  },
+  "artifacts": "/data/c13-check-b1e83e43234049c88e38dda86bf849c0",
+  "kafka_topic": "c13-check-20261117-c",
+  "fault_point": "SIGKILL after SQLite commit, before Spark commit, following an already committed 60-inspection prefix",
+  "replayed_batch": 3,
+  "checks": {
+    "earlier_spark_commit_preserved": true,
+    "query_epoch_preserved": true,
+    "sink_retry_left_windows_alerts_and_ledger_unchanged": true,
+    "recovered_provisional_snapshots_match_oracle": true,
+    "logical_alert_keys_preserved_through_finalization": true,
+    "exact_fixture_ids": true,
+    "unique_kafka_offsets": true,
+    "expected_final_alerts": true,
+    "historical_reconciliation": "passed"
+  },
+  "timing": {
+    "downtime_including_backlog_preparation_seconds": 11.015029034999998,
+    "restart_to_backlog_catch_up_seconds": 32.62059823800007,
+    "definition": "Monotonic wall-clock interval from relaunch to observing 119 served inspections; includes process startup, state reload, replay, backlog processing and polling"
+  },
+  "final_counts": {
+    "A": {"inspections": 60, "rejects": 6, "reject_rate": 0.1},
+    "B": {"inspections": 60, "rejects": 12, "reject_rate": 0.2}
+  },
+  "data_quality": {
+    "duplicate_injections": 10,
+    "retained_invalid_payloads": 2,
+    "within_allowance_accepted": 2,
+    "beyond_allowance_clean_rows": 0,
+    "controls_in_clean": 4,
+    "final_windows": 2,
+    "final_rule_status": {"A": "clear", "B": "active"}
+  },
+  "fault_selector_correction": "An earlier committed-prefix trial failed because update mode re-emitted a snapshot in a no-data batch. The final fault selector waits for 118 stored inspections as well as an earlier Spark commit.",
+  "limitations": [
+    "One controlled Q3 driver interruption; Kafka and Q1/Q2 remain available.",
+    "Does not cover broker/disk loss, interrupted Q1/Q2 or inspection projection, or simultaneous failures.",
+    "Recovery timings are one small correctness run, not a C14 capacity or end-to-end latency benchmark.",
+    "Scores are explicitly synthetic fixture values; no model accuracy is measured.",
+    "Raw data, checkpoints, database, driver logs and full reports remain in the retained archive-data volume."
+  ],
+  "exit_code": 0,
+  "result": "passed"
+}
