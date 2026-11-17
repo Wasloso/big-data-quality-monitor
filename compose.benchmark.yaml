@@ -12,3 +12,21 @@ services:
     mem_limit: 512m
     volumes:
       - archive-data:/data
+  benchmark-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    entrypoint: ["python", "-m", "quality_monitor.benchmark_observer"]
+    cpus: 1
+    mem_limit: 512m
+    volumes:
+      - type: volume
+        source: archive-data
+        target: /data/serving
+        volume:
+          subpath: ${BENCHMARK_RUN_ID:-unused}/serving
+          nocopy: true
+    environment:
+      QUALITY_DATABASE: /data/serving/quality.sqlite
+      STATIONS_DATABASE: /data/serving/stations.sqlite
+      PRODUCER_STATUS_ROOT: /data/serving/producer-status

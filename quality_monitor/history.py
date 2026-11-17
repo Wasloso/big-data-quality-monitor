@@ -57,7 +57,7 @@ def compare_windows(batch, served):
 
 
 def served_windows(database, run_id, limit):
-    with closing(sqlite3.connect(Path(database).resolve().as_uri() + "?mode=ro")) as connection:
+    with closing(sqlite3.connect(Path(database).resolve().as_uri() + "?mode=ro", uri=True)) as connection:
         connection.row_factory = sqlite3.Row
         rows = connection.execute("""
             SELECT run_id, line_id, category, model_version, threshold_version,

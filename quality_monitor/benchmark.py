@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import itertools
 import json
 import math
 import os
@@ -11,7 +12,6 @@ import subprocess
 import statistics
 import threading
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,6 +24,8 @@ def main():
     parser.add_argument("--profiles", nargs="+", choices=("steady", "burst", "skew", "duplicate-late"), default=["steady"])
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--rate", type=float, default=20)
+    parser.add_argument("--rates", type=float, nargs="+", help="Offered-rate sweep; overrides --rate")
+    parser.add_argument("--with-serving", action="store_true", help="Include inspection projection, producer status and HTTP polling")
     parser.add_argument("--warmup", type=float, default=10)
     parser.add_argument("--duration", type=float, default=60)
     parser.add_argument("--drain-seconds", type=float, default=60)
@@ -36,15 +38,18 @@ def main():
     parser.add_argument("--max-events", type=int, default=1000000)
     parser.add_argument("--output", type=Path, default=Path("artifacts/benchmarks"))
     args = parser.parse_args()
+    rates = args.rates or [args.rate]
     if any(value not in (1, 2, 4) for value in args.threads) or min(args.repetitions, args.partitions, args.shuffle_partitions) < 1:
         parser.error("Use local thread counts 1, 2 or 4 and positive count settings")
-    if any(not math.isfinite(value) or value <= 0 for value in (args.rate, args.duration, args.drain_seconds, args.burst_multiplier, args.trigger_seconds)):
+    if any(not math.isfinite(value) or value <= 0 for value in (*rates, args.duration, args.drain_seconds, args.burst_multiplier, args.trigger_seconds)):
         parser.error("Rate, duration, drain, burst multiplier and trigger must be positive and finite")
     if not math.isfinite(args.warmup) or args.warmup < 0 or args.payload_bytes < 0 or args.max_events < 1:
         parser.error("Warmup and padding must be nonnegative")
-    for profile in args.profiles:
+    if len(set(rates)) != len(rates) or len(set(args.threads)) != len(args.threads) or len(set(args.profiles)) != len(args.profiles):
+        parser.error("Thread, rate and profile selections must not repeat")
+    for rate, profile in itertools.product(rates, args.profiles):
         planned = sum(math.ceil(length * rate) for _, _, length, rate in load_segments(
-            args.rate, args.warmup, args.duration, profile, args.burst_multiplier,
+            rate, args.warmup, args.duration, profile, args.burst_multiplier,
         ))
         if planned > args.max_events:
             parser.error("Planned workload exceeds --max-events")
@@ -58,37 +63,45 @@ def main():
         result = subprocess.run(command, cwd=repo, env=env, text=True, capture_output=capture, check=True)
         return result.stdout.strip() if capture else None
 
-    revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, text=True, capture_output=True)
+    revision = subprocess.run(["git", "-c", f"safe.directory={repo.as_posix()}", "rev-parse", "HEAD"],
+                              cwd=repo, text=True, capture_output=True, check=True)
     hardware = json.loads(run(["docker", "info", "--format",
                                '{"cpus":{{.NCPU}},"memory_bytes":{{.MemTotal}},"storage_driver":"{{.Driver}}","server":"{{.ServerVersion}}"}'], capture=True))
     manifest = {"started_at": utc_now(), "revision": revision.stdout.strip(), "host": platform.platform(),
                 "docker": hardware, "settings": {**vars(args), "output": str(args.output)},
                 "spark_memory_limit": env.get("BENCHMARK_SPARK_MEMORY", "2g"),
                 "producer_cpu_limit": 1, "producer_memory_limit": "512m",
+                "api_cpu_limit": 1 if args.with_serving else None,
+                "api_memory_limit": "512m" if args.with_serving else None,
                 "source_sha256": {str(path.relative_to(repo)): hashlib.sha256(path.read_bytes()).hexdigest()
                                   for path in [repo / "quality_monitor" / name for name in (
-                                      "benchmark.py", "benchmark_producer.py", "benchmark_metrics.py",
+                                      "benchmark.py", "benchmark_producer.py", "benchmark_metrics.py", "benchmark_observer.py",
                                       "events.py", "ingest.py", "deduplicate.py", "windows.py", "store.py",
+                                      "inspection_store.py", "api.py", "producer_status.py",
                                   )] + [repo / name for name in (
                                       "scripts/benchmark_worker.py", "compose.yaml", "compose.benchmark.yaml",
                                       "Dockerfile.spark", "Dockerfile.kafka", "requirements-kafka.txt",
                                   )]},
-                "track": "infrastructure replay; fixture scores, separate producer and three Spark drivers",
+                "track": "infrastructure replay; fixture scores, separate producer and Spark drivers",
+                "serving_enabled": args.with_serving, "spark_drivers": 4 if args.with_serving else 3,
                 "storage": "archive-data named volume; host files contain observations/logs only"}
     (suite / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    run(compose + ["build", "spark-windows", "benchmark-producer"])
+    run(compose + ["build", "spark-windows", "benchmark-producer"] + (["benchmark-api"] if args.with_serving else []))
     results = []
-    for threads in args.threads:
+    for threads, rate in itertools.product(args.threads, rates):
         env["BENCHMARK_THREADS"] = str(threads)
         for profile in args.profiles:
             for repetition in range(1, args.repetitions + 1):
                 identifier = "c14-" + uuid4().hex[:16]
+                env["BENCHMARK_RUN_ID"] = identifier
                 root = "/data/" + identifier
-                destination = suite / f"local-{threads}-{profile}-{repetition}"
+                destination = suite / f"local-{threads}-rate-{rate:g}-{profile}-{repetition}"
                 destination.mkdir()
                 processes = {}
                 samples = []
-                print(f"Benchmark {identifier}: local[{threads}], {profile}, repetition {repetition}", flush=True)
+                print(f"Benchmark {identifier}: local[{threads}], {rate:g}/s, {profile}, repetition {repetition}", flush=True)
+                stages = ("q1", "q2", "q3", "q4") if args.with_serving else ("q1", "q2", "q3")
+                monitored = (*stages, "api") if args.with_serving else stages
 
                 def start(role, command):
                     log = (destination / (role + ".log")).open("w", encoding="utf-8")
@@ -122,7 +135,7 @@ def main():
                 def wait_for(predicate, seconds=180):
                     deadline = time.monotonic() + seconds
                     while not predicate():
-                        for role in ("q1", "q2", "q3"):
+                        for role in monitored:
                             if role in processes and processes[role]["process"].poll() is not None:
                                 raise RuntimeError(f"{role} exited; inspect {destination / (role + '.log')}")
                         if time.monotonic() > deadline:
@@ -144,12 +157,13 @@ def main():
                 def producer(bootstrap=False):
                     command = compose + ["run", "--rm", "--no-deps", "--name", identifier + ("-bootstrap" if bootstrap else "-generator"),
                                          "benchmark-producer", "--root", root, "--topic", identifier, "--run-id", identifier,
-                                         "--rate", str(args.rate), "--warmup", str(args.warmup), "--duration", str(args.duration),
+                                         "--rate", str(rate), "--warmup", str(args.warmup), "--duration", str(args.duration),
                                          "--profile", profile, "--seed", str(args.seed), "--burst-multiplier", str(args.burst_multiplier),
                                          "--payload-bytes", str(args.payload_bytes), "--max-events", str(args.max_events)]
-                    return command + (["--bootstrap"] if bootstrap else [])
+                    return command + (["--bootstrap"] if bootstrap else []) + (["--with-serving"] if args.with_serving else [])
 
                 result = {"run_id": identifier, "threads_per_driver": threads, "profile": profile,
+                          "target_rate": rate, "serving_enabled": args.with_serving,
                           "repetition": repetition, "volume_path": root, "result": "in_progress"}
                 try:
                     run(compose + ["run", "--rm", "kafka-init", "--bootstrap-server", "kafka:19092", "--create",
@@ -165,6 +179,12 @@ def main():
                     wait_for(lambda: sum(processes["q2"]["batches"].copy().values()) >= 2)
                     start("q3", worker("q3"))
                     wait_for(lambda: sum(processes["q3"]["batches"].copy().values()) >= 2)
+                    if args.with_serving:
+                        start("q4", worker("q4"))
+                        wait_for(lambda: sum(processes["q4"]["batches"].copy().values()) >= 2)
+                        start("api", compose + ["run", "--rm", "--no-deps", "--name", identifier + "-api",
+                                                "benchmark-api", "--root", "/data/serving", "--run-id", identifier])
+                        wait_for(lambda: processes["api"]["ready"])
                     generator = start("generator", producer())
                     finished = None
                     drained = False
@@ -172,7 +192,7 @@ def main():
                     with (destination / "samples.jsonl").open("w") as sample_log, (destination / "resources.jsonl").open("w") as resource_log:
                         while True:
                             now = time.monotonic()
-                            for role in ("q1", "q2", "q3"):
+                            for role in monitored:
                                 if processes[role]["process"].poll() is not None:
                                     raise RuntimeError(f"{role} exited; inspect its log")
                             windows = processes["q3"]["latest"].get("windows", {})
@@ -192,6 +212,8 @@ def main():
                             changed = windows.get("last_count_change_monotonic")
                             age = None if changed is None or observed_monotonic is None else max(0, observed_monotonic - changed)
                             sample = {"observed_at": observed_at, "kafka_offset_lag": lag,
+                                      "file_stages": {role: processes[role]["latest"].get("files") for role in stages},
+                                      "projected_inspections": processes.get("q4", {}).get("latest", {}).get("projection", {}).get("projected_inspections"),
                                       "estimated_container_monotonic": observed_monotonic,
                                       "producer_offsets_observed_monotonic": offered.get("observed_monotonic"),
                                       "producer_offsets_observed_at": offered.get("observed_at"),
@@ -206,7 +228,7 @@ def main():
                                 running = subprocess.run(["docker", "ps", "--filter", "name=" + identifier, "--format", "{{.Names}}"],
                                                          text=True, capture_output=True, check=True).stdout.splitlines()
                                 active = [state["name"] for role, state in processes.items()
-                                          if role in ("q1", "q2", "q3", "generator") and state["name"] in running]
+                                          if role in (*monitored, "generator") and state["name"] in running]
                                 if not active:
                                     raise RuntimeError("No benchmark containers available for resource observation")
                                 stats = subprocess.run(["docker", "stats", "--no-stream", "--format", "{{json .}}", *active],
@@ -234,14 +256,31 @@ def main():
                                 drained = bool(offered.get("final") and lag == 0 and q2_rows >= total and settled and
                                                (windows.get("served_inspections", 0) >= counts.get("measurement", {}).get("unique_acknowledged", 0)
                                                 if profile != "duplicate-late" else q3_idle and now - finished > 2 * args.trigger_seconds + 2))
+                                file_samples = [processes[role]["latest"].get("files") for role in stages if role != "q1"]
+                                files_drained = all(row is not None and row.get("pending_input_files") == 0 for row in file_samples)
+                                drained = drained and files_drained
+                                if args.with_serving:
+                                    projected = processes["q4"]["latest"].get("projection", {}).get("projected_inspections", 0)
+                                    api = processes["api"]["latest"].get("api", {})
+                                    overview = next((row for row in api.get("requests", []) if row["endpoint"] == "overview"), {})
+                                    drained = drained and bool(
+                                        projected == windows.get("served_inspections", 0)
+                                        and api.get("observed_monotonic", 0) >= offered.get("observed_monotonic", float("inf"))
+                                        and all(row["error"] is None for row in api.get("requests", []))
+                                        and overview.get("served_inspections") == windows.get("served_inspections", 0)
+                                    )
                                 if drained or now - finished >= args.drain_seconds:
                                     break
                             time.sleep(.5)
                     result["drain_settled"] = drained
                     result["remaining_kafka_lag"] = samples[-1]["kafka_offset_lag"]
-                    for role in ("q1", "q2", "q3"):
+                    result["remaining_file_backlog"] = {
+                        role: processes[role]["latest"].get("files") for role in stages if role != "q1"
+                    }
+                    for role in monitored:
+                        stop_root = "/data/serving" if role == "api" else root
                         run(["docker", "exec", processes[role]["name"], "python3", "-c",
-                             f"from pathlib import Path; Path('{root}/stop-{role}').touch()"])
+                             f"from pathlib import Path; Path('{stop_root}/stop-{role}').touch()"])
                         if processes[role]["process"].wait(timeout=60) != 0:
                             raise RuntimeError(f"{role} shutdown failed")
                         processes[role]["thread"].join(timeout=10)
@@ -256,6 +295,13 @@ def main():
                                 and start_time <= row["estimated_container_monotonic"] <= end_time]
                     result["measurement_kafka_lag"] = quantiles([row["kafka_offset_lag"] for row in measured if row["kafka_offset_lag"] is not None])
                     result["measurement_window_count_change_age_seconds"] = quantiles([row["window_count_change_age_seconds"] for row in measured if row["window_count_change_age_seconds"] is not None])
+                    result["measurement_file_backlog"] = {
+                        role: {field: quantiles([
+                            row["file_stages"][role][field] for row in measured
+                            if row["file_stages"][role] is not None and field in row["file_stages"][role]
+                        ]) for field in ("pending_input_files", "pending_input_bytes")}
+                        for role in stages if role != "q1"
+                    }
                     resources = {}
                     for line in (destination / "resources.jsonl").read_text().splitlines():
                         observation = json.loads(line)
@@ -298,6 +344,10 @@ def main():
                         result["validity_issues"].append("published_ids_not_archived")
                     if profile != "duplicate-late" and drained and (report["archived_ids_excluded_from_clean"] or report["clean_inspections_minus_served"]):
                         result["validity_issues"].append("unexpected_inspection_exclusion")
+                    if profile != "duplicate-late" and drained and not report["history_matches_served_totals"]:
+                        result["validity_issues"].append("historical_totals_differ_from_serving")
+                    if args.with_serving and drained and report.get("clean_inspections_minus_projected") != 0:
+                        result["validity_issues"].append("inspection_projection_incomplete")
                     result["result"] = "completed" if drained else "drain_timeout"
                     if result["validity_issues"]:
                         result["result"] = "failed"
@@ -305,7 +355,7 @@ def main():
                     result.update({"result": "failed", "error": f"{type(error).__name__}: {error}"})
                 finally:
                     result["workers"] = {role: state["latest"].get("ready") for role, state in processes.items()
-                                         if role in ("q1", "q2", "q3")}
+                                         if role in monitored}
                     for state in processes.values():
                         if state["process"].poll() is None:
                             subprocess.run(["docker", "stop", "--time", "20", state["name"]], capture_output=True)
@@ -319,17 +369,18 @@ def main():
                 if result["result"] == "failed":
                     raise SystemExit(1)
     comparison = []
-    for threads in args.threads:
+    for threads, rate in itertools.product(args.threads, rates):
         for profile in args.profiles:
-            runs = [row for row in results if row["threads_per_driver"] == threads and row["profile"] == profile]
+            runs = [row for row in results if row["threads_per_driver"] == threads and row["target_rate"] == rate and row["profile"] == profile]
             completed = [row for row in runs if row["result"] == "completed"]
-            rates = [row["report"]["measurement_processed_inspections_per_second"] for row in completed]
+            processed_rates = [row["report"]["measurement_processed_inspections_per_second"] for row in completed]
             p95 = [row["report"]["archival_commit_observed_latency_seconds"]["p95"] for row in completed
                    if row["report"]["archival_commit_observed_latency_seconds"]["p95"] is not None]
             comparison.append({"threads_per_driver": threads, "profile": profile,
+                               "target_rate": rate, "serving_enabled": args.with_serving,
                                "attempts": len(runs), "completed_repetitions": len(completed),
                                "incomplete_repetitions": len(runs) - len(completed),
-                               "processed_inspections_per_second_mean": statistics.mean(rates) if rates else None,
+                               "processed_inspections_per_second_mean": statistics.mean(processed_rates) if processed_rates else None,
                                "archival_p95_seconds_median": statistics.median(p95) if p95 else None,
                                "generator_deadline_overrun_repetitions": sum(row["report"]["publications_after_measurement_deadline"] > 0 for row in completed),
                                "scope": "Completed runs only; incomplete run reports retained separately"})

@@ -115,7 +115,7 @@ def main():
         return sum(row["inspections"] for row in rows)
 
     def alert_keys():
-        with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro")) as connection:
+        with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)) as connection:
             return connection.execute("SELECT alert_id, window_key FROM alerts ORDER BY alert_id").fetchall()
 
     try:
@@ -274,7 +274,7 @@ def main():
         assert not expected_ids.join(actual_ids, "inspection_id", "left_anti").count()
         assert not actual_ids.join(expected_ids, "inspection_id", "left_anti").count()
         assert not history.groupBy("topic", "partition", "offset").count().filter("count > 1").count()
-        with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro")) as connection:
+        with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)) as connection:
             alerts = connection.execute("""
                 SELECT w.line_id, a.status, a.is_provisional FROM alerts a
                 JOIN windows w USING(window_key) ORDER BY w.line_id

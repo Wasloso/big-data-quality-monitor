@@ -23,7 +23,7 @@ def show_dashboard():
         st.info("No serving database yet. Start the window writer with --database /data/serving/quality-v2.sqlite.")
         return
     try:
-        with closing(sqlite3.connect(DATABASE.resolve().as_uri() + "?mode=ro", timeout=5)) as connection:
+        with closing(sqlite3.connect(DATABASE.resolve().as_uri() + "?mode=ro", uri=True, timeout=5)) as connection:
             connection.row_factory = sqlite3.Row
             # Read both tables from one committed snapshot while Spark writes.
             connection.execute("BEGIN")

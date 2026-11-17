@@ -20,7 +20,7 @@ def save_json(path, value):
 
 
 def serving_snapshot(database):
-    with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro")) as connection:
+    with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)) as connection:
         return {table: connection.execute(f"SELECT * FROM {table} ORDER BY 1, 2").fetchall()
                 for table in ("windows", "alerts", "processed_batches")}
 
@@ -56,7 +56,7 @@ def main():
             if args.crash and batch_id > 0 and not fault.exists():
                 # Update mode can re-emit a snapshot in a no-data batch. Interrupt only
                 # after the intended second portion, not just any nonempty callback.
-                with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro")) as connection:
+                with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)) as connection:
                     count = connection.execute("SELECT SUM(inspections) FROM windows").fetchone()[0]
                 if count == 118:
                     save_json(fault, {"batch_id": batch_id, "epoch": epoch, "point": "after-sqlite-before-spark-commit"})

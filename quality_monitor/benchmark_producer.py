@@ -33,6 +33,7 @@ def main():
     parser.add_argument("--payload-bytes", type=int, default=0)
     parser.add_argument("--max-events", type=int, default=1000000)
     parser.add_argument("--bootstrap", action="store_true")
+    parser.add_argument("--with-serving", action="store_true")
     args = parser.parse_args()
     if not math.isfinite(args.warmup) or args.warmup < 0 or not math.isfinite(args.duration) or args.duration <= 0:
         parser.error("Use finite nonnegative warmup and positive duration")
@@ -62,6 +63,24 @@ def main():
     last_report = started - 1
     overdue_max = 0.0
     errors = []
+    station_counts = {line: dict(attempted=0, completed=0, queued=0, published=0,
+                                  inference_errors=0, enqueue_errors=0, delivery_errors=0) for line in ("A", "B")}
+
+    def save_status(final):
+        directory = args.root / "serving/producer-status"
+        directory.mkdir(parents=True, exist_ok=True)
+        for line, counters in station_counts.items():
+            value = {"schema_version": 1, "run_id": args.run_id, "station": line,
+                     "session_id": f"{args.run_id}-{line}", "category": "bottle",
+                     "model_version": "fixture-benchmark-v1", "threshold_version": "fixture-0.5", "threshold": .5,
+                     "mode": "fixture-replay", "target_rate": args.rate, "state": "stopped" if final else "running",
+                     "started_at": summary["started_at"], "updated_at": utc_now(), "last_error": errors[-1] if errors else None,
+                     "stopped_at": utc_now() if final else None, **counters,
+                     "pending": counters["queued"] - counters["published"] - counters["delivery_errors"]}
+            path = directory / (line + ".json")
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(value))
+            temporary.replace(path)
 
     def report(final=False):
         nonlocal last_report
@@ -71,12 +90,18 @@ def main():
         value = {"kind": "producer", "observed_at": utc_now(), "counts": counts,
                  "observed_monotonic": time.monotonic(), "end_offsets": heads, "final": final}
         emit(value)
+        if args.with_serving and not args.bootstrap:
+            save_status(final)
         last_report = time.monotonic()
 
     def send(event, phase, duplicate, delayed, scheduled_at, journal):
         nonlocal overdue_max
         state = counts[phase]
+        station = station_counts[event["line_id"]] if phase == "measurement" else None
         state["attempted"] += 1
+        if station is not None:
+            station["attempted"] += 1
+            station["completed"] += 1
         event = {**event, "published_at": utc_now()}
         event["benchmark_published_monotonic"] = time.monotonic()
         validate_event(event)
@@ -85,10 +110,21 @@ def main():
             if error is not None:
                 state["errors"] += 1
                 errors.append(str(error))
+                if station is not None:
+                    station["delivery_errors"] += 1
             else:
                 state["acknowledged"] += 1
                 state["unique_acknowledged"] += int(not duplicate)
-        producer.produce(args.topic, key=event["line_id"].encode(), value=json.dumps(event).encode(), on_delivery=delivered)
+                if station is not None:
+                    station["published"] += 1
+        try:
+            producer.produce(args.topic, key=event["line_id"].encode(), value=json.dumps(event).encode(), on_delivery=delivered)
+        except Exception:
+            if station is not None:
+                station["enqueue_errors"] += 1
+            raise
+        if station is not None:
+            station["queued"] += 1
         state["queued"] += 1
         state["duplicates"] += int(duplicate)
         state["delayed"] += int(delayed)

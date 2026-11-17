@@ -11,9 +11,10 @@ from pathlib import Path
 
 from pyspark.sql import SparkSession, functions as F
 
-from quality_monitor.benchmark_metrics import emit, quantiles, read_jsonl, utc_now
+from quality_monitor.benchmark_metrics import emit, quantiles, read_jsonl, stage_files, utc_now
 from quality_monitor.deduplicate import clean_records
 from quality_monitor.ingest import archive_records, file_query_contract
+from quality_monitor.inspection_store import write_inspections
 from quality_monitor.store import query_epoch, write_batch
 from quality_monitor.windows import quality_windows
 
@@ -62,12 +63,15 @@ def analyze(spark, root, run_id):
             latency = dict(zip(("p50", "p95", "p99"), row["percentiles"]))
             latency.update({"count": row["count"], "max": row["maximum"]})
         unmatched -= row["count"]
-    database = root / "serving.sqlite"
-    with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro")) as connection:
+    database = root / "serving/quality.sqlite"
+    with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)) as connection:
         served = connection.execute(
             "SELECT COUNT(*), COALESCE(SUM(inspections),0), COALESCE(SUM(rejects),0), COALESCE(SUM(is_final=0),0) FROM windows WHERE run_id=?",
             (run_id,),
         ).fetchone()
+        served_by_line = dict((line, (count, rejects)) for line, count, rejects in connection.execute(
+            "SELECT line_id, SUM(inspections), SUM(rejects) FROM windows WHERE run_id=? GROUP BY line_id", (run_id,),
+        ))
     snapshots = read_jsonl(root / "window-observations.jsonl")
     start, end = plan["measurement_start_monotonic"], plan["measurement_end_monotonic"]
     def count_at(epoch):
@@ -99,13 +103,55 @@ def analyze(spark, root, run_id):
             if start <= row["observed_monotonic"] <= end
         ]),
     }
+    started = time.monotonic()
+    historical = clean.filter("record_kind = 'inspection'").groupBy("line_id").agg(
+        F.count("*").alias("inspections"), F.sum(F.col("is_reject").cast("long")).alias("rejects"),
+    ).collect()
+    report["historical_query_seconds"] = time.monotonic() - started
+    report["historical_line_totals"] = [row.asDict() for row in historical]
+    report["history_matches_served_totals"] = {row.line_id: (row.inspections, row.rejects) for row in historical} == served_by_line
+    report["parquet_storage"] = {
+        stage: {key: value for key, value in stage_files(root, stage).items() if key.startswith("output_")}
+        for stage in ("q1", "q2")
+    }
+    report["serving_storage_bytes"] = sum(path.stat().st_size for path in (root / "serving").glob("*.sqlite*"))
+    if (root / "projection-observations.jsonl").exists():
+        projection = read_jsonl(root / "projection-observations.jsonl")
+        report["projected_measurement_inspections"] = projection[-1]["projected_inspections"] if projection else 0
+        report["clean_inspections_minus_projected"] = clean.count() - report["projected_measurement_inspections"]
+        report["inspection_projection_batch_seconds"] = quantiles([
+            row["sink_seconds"] for row in projection if start <= row["observed_monotonic"] <= end
+        ])
+    if (root / "serving/api-observations.jsonl").exists():
+        observations = read_jsonl(root / "serving/api-observations.jsonl")
+        requests = [request for row in observations if start <= row["observed_monotonic"] <= end for request in row["requests"]]
+        report["api_requests"] = {"count": len(requests), "errors": sum(row["error"] is not None for row in requests),
+                                  "response_seconds": quantiles([row["seconds"] for row in requests]),
+                                  "scope": "HTTP polling of bounded views; excludes browser rendering and image loading"}
+        responses = spark.read.json(str(root / "serving/api-observations.jsonl")).select(F.explode("requests").alias("request"))
+        visible = (responses.select(F.explode("request.visible_inspection_ids").alias("inspection_id"),
+                                    F.col("request.observed_monotonic").alias("observed"))
+                   .groupBy("inspection_id").agg(F.min("observed").alias("observed")))
+        publication = journal.groupBy("inspection_id").agg(F.min("published_monotonic").alias("published"))
+        seen = visible.join(publication, "inspection_id").select((F.col("observed") - F.col("published")).alias("seconds"))
+        timing = seen.agg(F.count("*").alias("count"), F.min("seconds").alias("minimum"),
+                          F.max("seconds").alias("maximum"),
+                          F.percentile_approx("seconds", [.5, .95, .99], 10000).alias("percentiles")).first()
+        if timing["minimum"] is not None and timing["minimum"] < 0:
+            raise ValueError("Negative publication-to-HTTP observation latency")
+        report["api_inspection_visibility"] = {
+            "observed_unique_inspections": timing["count"],
+            "clean_inspections_without_http_observation": clean_ids.join(visible, "inspection_id", "left_anti").count(),
+            "latency_seconds": {**dict(zip(("p50", "p95", "p99"), timing["percentiles"] or [None] * 3)), "max": timing["maximum"]},
+            "scope": "First successful sampled bounded item response after publication; includes projection and polling delay, not browser rendering",
+        }
     (root / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     emit({"kind": "report", **report})
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--stage", choices=("prepare", "q1", "q2", "q3", "analyze"), required=True)
+    parser.add_argument("--stage", choices=("prepare", "q1", "q2", "q3", "q4", "analyze"), required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--topic", required=True)
@@ -115,6 +161,7 @@ def main():
     root = args.root
     if args.stage == "prepare":
         root.mkdir(parents=True, exist_ok=False)
+        (root / "serving").mkdir()
         emit({"kind": "prepared", "root": str(root)})
         return
     spark = (SparkSession.builder.appName("benchmark-" + args.stage)
@@ -140,8 +187,33 @@ def main():
                                             "shuffle_partitions": args.shuffle_partitions})
             schema = spark.read.parquet(str(root / "raw")).schema
             writer = clean_records(spark.readStream.schema(schema).parquet(str(root / "raw"))).writeStream.format("parquet").option("path", str(root / "clean"))
+        elif args.stage == "q4":
+            database = root / "serving/stations.sqlite"
+            epoch = query_epoch(checkpoint, {
+                "query_version": "inspection-serving-v2", "input": str(root / "clean"),
+                "database": str(database), "retention": 1000, "max_batch_rows": 1000,
+            }, tables=("inspection_samples", "station_latest"))
+            schema = spark.read.parquet(str(root / "clean")).schema
+            source = (spark.readStream.schema(schema).option("maxFilesPerTrigger", 1)
+                      .parquet(str(root / "clean")).filter("record_kind = 'inspection'"))
+            projected = 0
+            def project(batch, batch_id):
+                nonlocal projected
+                started = time.monotonic()
+                rows = batch.limit(1001).collect()
+                if len(rows) > 1000:
+                    raise RuntimeError("Inspection batch exceeds production's 1000-row bound")
+                write_inspections(str(database), [row.asDict(recursive=True) for row in rows], epoch, batch_id)
+                projected += sum(row.run_id == args.run_id for row in rows)
+                value = {"kind": "projection", "stage": "q4", "batch_id": batch_id,
+                         "observed_monotonic": time.monotonic(), "observed_at": utc_now(),
+                         "projected_inspections": projected, "sink_seconds": time.monotonic() - started}
+                with (root / "projection-observations.jsonl").open("a") as handle:
+                    handle.write(json.dumps(value) + "\n")
+                emit(value)
+            writer = source.writeStream.foreachBatch(project).outputMode("append")
         else:
-            database = root / "serving.sqlite"
+            database = root / "serving/quality.sqlite"
             epoch = query_epoch(checkpoint, {
                 "query_version": 2, "input": str(root / "clean"), "database": str(database),
                 "window": "1 minute", "lateness": "2 minutes", "final": False,
@@ -170,7 +242,7 @@ def main():
                 if changed:
                     changed_at = observed
                     changed_monotonic = time.monotonic()
-                with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro")) as connection:
+                with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)) as connection:
                     count = connection.execute("SELECT COALESCE(SUM(inspections),0) FROM windows WHERE run_id=?", (args.run_id,)).fetchone()[0]
                 value = {"kind": "windows", "stage": "q3", "observed_at": observed,
                          "observed_monotonic": time.monotonic(),
@@ -186,7 +258,7 @@ def main():
               "python_version": platform.python_version(), "master": spark.sparkContext.master,
               "java_version": spark._jvm.java.lang.System.getProperty("java.version"),
               "jvm_max_heap_bytes": spark._jvm.java.lang.Runtime.getRuntime().maxMemory()})
-        last_batch, last_status = None, 0.0
+        last_batch, last_status, committed_offset = None, 0.0, None
         with (root / (args.stage + "-progress.jsonl")).open("a") as handle:
             while query.isActive and not (root / ("stop-" + args.stage)).exists():
                 for raw_progress in query.recentProgress:
@@ -200,8 +272,18 @@ def main():
                         handle.write(json.dumps(value) + "\n")
                         handle.flush()
                         emit(value)
+                        if args.stage != "q1":
+                            committed_offset = progress["sources"][0]["endOffset"]
+                            if isinstance(committed_offset, str):
+                                committed_offset = json.loads(committed_offset)
                 if time.monotonic() - last_status >= 1:
                     emit({"kind": "status", "stage": args.stage, **query.status})
+                    try:
+                        files = stage_files(root, args.stage, committed_offset)
+                    except FileNotFoundError:
+                        files = {"error": "File metadata changed during observation; retrying next sample"}
+                    emit({"kind": "files", "stage": args.stage, "observed_at": utc_now(),
+                          "observed_monotonic": time.monotonic(), **files})
                     last_status = time.monotonic()
                 query.awaitTermination(.25)
             if query.exception() is not None:

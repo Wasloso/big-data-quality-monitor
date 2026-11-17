@@ -33,7 +33,7 @@ def query_epoch(checkpoint, contract, *, tables=("windows", "alerts")):
         # A retained Spark commit must still have its matching durable sink transaction.
         database = Path(contract["database"]).resolve()
         try:
-            with closing(sqlite3.connect(database.as_uri() + "?mode=ro")) as connection:
+            with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
                 for table in tables:
                     connection.execute(f"SELECT 1 FROM {table} LIMIT 1")
                 applied = connection.execute(

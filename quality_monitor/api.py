@@ -31,7 +31,7 @@ def snapshot(database=None):
         yield None
         return
     try:
-        with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", timeout=5)) as connection:
+        with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True, timeout=5)) as connection:
             connection.row_factory = sqlite3.Row
             connection.execute("BEGIN")
             yield connection
