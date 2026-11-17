@@ -1,16 +1,23 @@
 import React from 'react';
+import { age, old, utc } from './display.js';
 
-export default function StationObservation({ item, label = 'Latest observation in this run' }) {
+export default function StationObservation({ item, label = 'Latest station observation' }) {
   const context = item?.station_context;
-  if (!context) return <p>Machine context unavailable.</p>;
-  const observed = new Date(item.event_time);
-  const stale = Date.now() - observed.getTime() > 300_000;
+  if (!context) return <div className="observation-empty"><span className="status-dot muted" />Station readings unavailable</div>;
   return <div className="station-observation">
-    <p><strong>{label} · simulated readings</strong></p>
-    <p>Work order: {context.work_order} · Operation: {context.operation}</p>
-    <p>Temperature: {context.temperature_c.toFixed(2)} °C · Conveyor: {context.conveyor_speed_m_min.toFixed(2)} m/min</p>
-    <p>Reported state at observation: {context.reported_state}</p>
-    <small>{observed.toISOString().replace('T', ' ').slice(0, 19)} UTC · Observations update with inspections.</small>
-    {stale && <p className="warning">Old observation. Current machine state is unknown.</p>}
+    <div className="section-label"><span>{label}</span><span className="tag">Simulated</span></div>
+    <div className="readings">
+      <div><span>Temperature</span><strong>{context.temperature_c.toFixed(1)}<small>°C</small></strong></div>
+      <div><span>Conveyor speed</span><strong>{context.conveyor_speed_m_min.toFixed(1)}<small>m/min</small></strong></div>
+    </div>
+    <dl className="context-grid">
+      <div><dt>Work order</dt><dd>{context.work_order}</dd></div>
+      <div><dt>Operation</dt><dd>{context.operation}</dd></div>
+      <div><dt>Recorded state</dt><dd>{context.reported_state}</dd></div>
+      <div><dt>Observed</dt><dd title={`${utc(item.event_time)} UTC`}>{age(item.event_time)}</dd></div>
+    </dl>
+    <p className={`observation-age ${old(item.event_time) ? 'text-warning' : ''}`}>
+      {old(item.event_time) ? 'Old observation · current machine state unknown' : 'Updates with inspections · not a machine heartbeat'}
+    </p>
   </div>;
 }
