@@ -1,0 +1,72 @@
+{
+  "recorded_date": "2026-11-17",
+  "scope": "Functional check of the C14 harness, not a sustained capacity measurement",
+  "base_revision": "8aa9e7589a90810d608551718b18a6e158597797",
+  "run_id": "c14-b770648c282c4c01",
+  "host_artifacts": "artifacts/benchmarks/suite-d3b24d36d9ad",
+  "volume_artifacts": "/data/c14-b770648c282c4c01",
+  "source_sha256": {
+    "quality_monitor/benchmark.py": "e5390b419004bdfafac5f32f8f2f8a15a6ee10881519e3fc687941845c671372",
+    "quality_monitor/benchmark_producer.py": "78a13ee72a6eab08dc6700695c9e168495e40be80de1375360b8f7eb9af7d6d9",
+    "quality_monitor/benchmark_metrics.py": "4a225fe55e627fe3b4e177a2d19152ecd719683fc27945e2bb39882b1f864d74",
+    "scripts/benchmark_worker.py": "017f044e5d7a4ae5c9eb580336bf0991a59a1f1e71dd5be3272464d4b1ac550b"
+  },
+  "configuration": {
+    "spark_version": "4.0.2",
+    "java_version": "17.0.17",
+    "spark_python_version": "3.10.12",
+    "kafka_python_client": "2.16.0",
+    "docker_engine": "28.5.1",
+    "docker_cpus": 8,
+    "docker_memory_bytes": 8021835776,
+    "storage": "archive-data named volume, overlayfs",
+    "drivers": 3,
+    "threads_and_cpu_limit_per_driver": 1,
+    "memory_limit_per_driver": "2g",
+    "producer_cpu_limit": 1,
+    "producer_memory_limit": "512m",
+    "kafka_partitions": 2,
+    "shuffle_partitions": 2,
+    "trigger_seconds": 1,
+    "warmup_seconds": 2,
+    "measurement_seconds": 8,
+    "profile": "steady",
+    "repetitions": 1,
+    "target_messages_per_second": 10
+  },
+  "observed": {
+    "offered_messages_per_second_within_measurement_interval": 10.0,
+    "measurement_messages_acknowledged": 80,
+    "raw_measurement_messages": 80,
+    "clean_measurement_inspections": 80,
+    "served_measurement_inspections_after_drain": 80,
+    "served_predicted_rejects": 12,
+    "measurement_inspections_committed_inside_measurement_interval": 0,
+    "archival_commit_observed_latency_seconds": {
+      "count": 80,
+      "p50": 6.5804644929999085,
+      "p95": 8.719816303000243,
+      "p99": 8.998471599000368,
+      "max": 8.998471599000368
+    },
+    "unmatched_archival_observations": 0,
+    "missing_published_ids": 0,
+    "clean_duplicate_ids": 0,
+    "clean_minus_served": 0,
+    "provisional_windows_at_shutdown": 2,
+    "remaining_kafka_lag": 0,
+    "sampled_measurement_peak_kafka_lag": 56,
+    "resource_samples_per_container_inside_measurement": 2,
+    "drain_settled": true,
+    "validity_issues": []
+  },
+  "result": "completed",
+  "limitations": [
+    "Only local[1] and the steady profile were exercised in this short check; the comparison/profile campaign is pending.",
+    "The 8-second interval and 2-second warmup were shorter than this run's end-to-end pipeline fill time: all 80 main-run inspections committed during drain, so measured-window processed throughput was zero. This is not a capacity conclusion.",
+    "No main-run window-count change or aggregate sink observation occurred inside the measurement interval; those interval summaries are null rather than fabricated zero-latency samples.",
+    "Archival latency uses the shared Linux monotonic clock and includes progress-observation delay; resource alignment uses received clock markers.",
+    "Actual UTC stamps remain in artifacts for audit. Synthetic event times and fixture scores are not inference or accuracy measurements.",
+    "Browser visibility and final-window latency were not measured."
+  ]
+}

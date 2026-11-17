@@ -36,6 +36,7 @@ See [the context and runtime transition guide](docs/station-context.md) before u
 - [x] Show bounded producer-session reports, acknowledgements and errors independently of processed windows.
 - [x] Check mixed-category dashboard/live flow using both fitted artifacts (115 unique real predictions; independent stop/restart).
 - [x] Verify retained-state Q3 crash/retry recovery over real Kafka with duplicates, invalid and delayed records (C13).
+- [x] Implement a controlled replay and telemetry harness for C14 (measured comparison campaign pending).
 - [ ] Measure throughput and visibility delays, then rehearse the clean-checkout handoff.
 
 ## Publish inspections to Kafka
@@ -170,6 +171,8 @@ It uses the real Q1 validation transformation on Kafka-shaped rows, then separat
 The scenario injects ten duplicates and two invalid payloads, holds back two reject inspections, advances event time to `12:02:30Z`, then supplies those inspections at `12:00:40Z` within the allowance. Controls at `12:04Z` finalize the fixture minute. It compares the two final rows with the separate fixture oracle, checks window boundaries/group metadata and exclusion of control-only windows, then injects an older distinct inspection and verifies that closed results stay unchanged. It records whether that inspection survived Q2; it does not assume all beyond-watermark arrivals are dropped under every batching arrangement.
 
 ## Historical queries
+
+For C14, [the performance guide](docs/performance.md) provides the independent paced generator, three-driver Docker runner, workload profiles, per-run manifests, archival latency, Kafka lag, window freshness and resource measurements. Run `python -m quality_monitor.benchmark --help` for options. A short 80-message check passed on 17 November 2026; its [record](docs/results/stream-benchmark-smoke.json) explicitly preserves the short interval's limits. The repeated comparison campaign remains pending.
 
 For C13, the same pipeline runner also supports a real-Kafka recovery mode that kills a separate Q3 driver after its SQLite transaction and verifies checkpoint replay, backlog catch-up, exact inspection IDs and stable final window/alert results. It passed on 17 November 2026; see [the recovery instructions](docs/recovery-check.md) for the isolated topic, command, measured result, retained artifacts and scope.
 

@@ -1,0 +1,14 @@
+# Deliberate C14 runs only; production services keep their normal configuration.
+services:
+  spark-windows:
+    cpus: ${BENCHMARK_THREADS:-2}
+    mem_limit: ${BENCHMARK_SPARK_MEMORY:-2g}
+  benchmark-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.kafka
+    entrypoint: ["python", "-m", "quality_monitor.benchmark_producer"]
+    cpus: 1
+    mem_limit: 512m
+    volumes:
+      - archive-data:/data
